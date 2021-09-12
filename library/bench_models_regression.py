@@ -4,24 +4,9 @@ import numpy as np
 
 from .models_regression import SimpleNet, Encoder
 from . import common_preprocessing
+from .loggers import LearningLogStorer
+
 from torch.utils.tensorboard import SummaryWriter
-
-
-class LearningLogStorer:
-    def __init__(self, tensorboard_writer=None):
-        self.tensorboard_writer = tensorboard_writer
-        self.train_logs = {"loss": [], "correlation": [], "correlation_speech": []}
-        self.test_logs = {"loss": [], "correlation": [], "correlation_speech": []}
-
-    def add_value(self, name, is_train, value, iteration):
-        train_or_test = "train" if is_train else "test"
-        if self.tensorboard_writer is not None:
-            self.tensorboard_writer.add_scalar(f'{train_or_test}/{name}', value, iteration)
-        if is_train:
-            self.train_logs[name].append((iteration, value))
-        else:
-            self.test_logs[name].append((iteration, value))
-        return
 
         
 class BenchModelRegressionBase:

@@ -18,6 +18,49 @@ FILES_LIST = [
 
 SAMPLING_RATE = 19200
 
+MODEL_DUMPS_DIR = 'model_dumps'
+RESULTS_DIR = 'results'
+
+
+REGRESSION_MODE = "regression"
+CLASSIFICATION_MODE = "classification"
+
+WORDS_REMAP = {
+    'silent' : 0,
+
+    'женя' : 1,
+    'широко' : 2,
+    'шагает' : 3,
+    'желтых' : 4,
+    'штанах' : 5,
+
+    'шуру' : 6,
+    'ужалил' : 7,
+    'шершень' : 8,
+
+    'лара' : 9,
+    'ловко' : 10,
+    'крутит' : 11,
+    'руль' : 12,
+    'левой' : 13,
+    'рукой' : 14,
+
+    'лирику' : 15,
+    'любит' : 16,
+    'лиля' : 17,
+
+    'бабушка' : 18,
+    'боится' : 19,
+    'барабанов' : 20,
+
+    'белого' : 21,
+    'барана' : 22,
+    'больно' : 23,
+    'бодает' : 24,
+    'бешеный' : 25,
+    'бык' : 26
+}
+
 
 def data_generator(X, Y, batch_size, lag_backward, lag_forward, shuffle=True, infinite=True):
     assert len(X)==len(Y) or len(Y)==0

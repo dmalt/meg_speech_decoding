@@ -4,6 +4,7 @@ import os.path
 
 import library
 import library.runner_regression
+import library.runner_classification
 
 
 def parse_args():
@@ -11,7 +12,6 @@ def parse_args():
     parser.add_argument('--model', required=True)
     parser.add_argument('--mode', required=True)
     parser.add_argument('--runs_count', required=False) # for regression
-    parser.add_argument('--regression_model', required=False) # for classification
     
 
     assert 'CUDA_VISIBLE_DEVICES' in os.environ, \
@@ -28,8 +28,7 @@ if __name__ == '__main__':
             int(parsed_args.runs_count),
         )
     elif parsed_args.mode == "classification":
-        library.runner_classification.run_regression(
+        library.runner_classification.run_classification(
             parsed_args.model,
-            parsed_args.regression_model,
         )      
  
