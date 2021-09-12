@@ -10,13 +10,13 @@ from .runner_common import FILES_LIST, SAMPLING_RATE, data_generator
 from . import bench_models_regression
 
 
-# MAX_ITERATIONS_COUNT = 20_000
-# METRIC_ITERATIONS = 10_000
+MAX_ITERATIONS_COUNT = 10_000
+METRIC_ITERATIONS = 1_000
 
-MAX_ITERATIONS_COUNT = 100
-METRIC_ITERATIONS = 100
+# MAX_ITERATIONS_COUNT = 5000
+# METRIC_ITERATIONS = 100
 
-TEST_START_FILE_INDEX = 1
+TEST_START_FILE_INDEX = 5
 
 def corr_multiple(x, y):
     assert x.shape[1] == y.shape[1]
@@ -96,15 +96,15 @@ def run_regression(bench_model_name, runs_count=1):
     X = []
     Y = []
 
-    for filepath in FILES_LIST[:2]:
+    for filepath in FILES_LIST:
         with h5py.File(filepath,'r+') as input_file:
             data = input_file['RawData']['Samples'][()]
 
         ecog = data[:, :30].astype("double")
         sound = data[:, 31].astype("double")
 
-        x = bench_model.preprocess_ecog(ecog[:20*SAMPLING_RATE], SAMPLING_RATE).astype("float32")
-        y = bench_model.preprocess_sound(sound[:20*SAMPLING_RATE], SAMPLING_RATE, x.shape[0]).astype("float32")
+        x = bench_model.preprocess_ecog(ecog, SAMPLING_RATE).astype("float32")
+        y = bench_model.preprocess_sound(sound, SAMPLING_RATE, x.shape[0]).astype("float32")
 
         if len(y.shape) == 1:
             y = y.reshape((-1, 1))
@@ -141,7 +141,7 @@ def run_regression(bench_model_name, runs_count=1):
             with torch.no_grad():
                 metrics = process_batch(bench_model, val_generator, False, iteration)
                 is_last_iteration = iteration == (MAX_ITERATIONS_COUNT - 1)
-                if (iteration % 4000 == 0 or is_last_iteration) and max_metric <= metrics["correlation"]:
+                if (iteration % 2000 == 0 or is_last_iteration) and max_metric <= metrics["correlation"]:
                     max_metric = metrics["correlation"]
                     torch.save(bench_model.model.state_dict(), model_path)
 

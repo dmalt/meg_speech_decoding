@@ -112,9 +112,9 @@ def extract_lpcs(sound, order, window_size, hop_size, out_length, win_length):
 
 def classic_ecog_pipeline(ecog, sampling_rate, downsampling_coef, low_pass_hz, high_pass_hz):
     ecog = scipy.signal.decimate(ecog, downsampling_coef, axis=0)
-    ecog = remove_eyes_artifacts(ecog, int(sampling_rate / downsampling_coef), low_pass_hz)
+    ecog = remove_eyes_artifacts(ecog, int(sampling_rate / downsampling_coef), high_pass_hz)
     ecog = notch_filtering_advanced(ecog, sampling_rate)
-    ecog = remove_target_leakage(ecog, int(sampling_rate / downsampling_coef), high_pass_hz)
+    ecog = remove_target_leakage(ecog, int(sampling_rate / downsampling_coef), low_pass_hz)
     ecog = sklearn.preprocessing.scale(ecog, copy=False)
     return ecog
 
