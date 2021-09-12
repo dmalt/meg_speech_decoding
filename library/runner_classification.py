@@ -213,8 +213,7 @@ def run_classification(regression_bench_model_name):
         x = bench_regression_model.preprocess_ecog(ecog, SAMPLING_RATE).astype("float32")
         ecog_preprocessed_cache.append(x)
 
-    X = []
-    Y = []
+
     all_models_files = []
 
     for filename in os.listdir(MODEL_DUMPS_DIR):
@@ -223,6 +222,7 @@ def run_classification(regression_bench_model_name):
             all_models_files.append(filename)
 
     for regression_model_filename in all_models_files:
+        bench_regression_model = getattr(bench_models_regression, regression_bench_model_name)()
         assert regression_bench_model_name in regression_model_filename
         print("Start File:", regression_model_filename)
         
@@ -231,6 +231,8 @@ def run_classification(regression_bench_model_name):
 
         bench_regression_model.model.load_state_dict(torch.load(regression_model_file_path))
 
+        X = []
+        Y = []
 
         for index, filepath in enumerate(FILES_LIST):
             with h5py.File(filepath,'r+') as input_file:
