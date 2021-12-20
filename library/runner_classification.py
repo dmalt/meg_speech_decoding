@@ -327,6 +327,7 @@ def run_classification(regression_bench_model_name, patient, is_debug=False):
                         assert iteration >= best_iteration
                         if (iteration - best_iteration) > EARLY_STOP_STEPS:
                             print(f"Stopping model. Iteration {iteration} {round(smoothed_metric, 2)}. Best iteration {best_iteration} {round(max_metric, 2)}.")
+                            break
 
         bench_model.model.load_state_dict(torch.load(model_path))
         bench_model.model.eval()
