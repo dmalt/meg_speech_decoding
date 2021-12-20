@@ -19,13 +19,15 @@ class BenchModelClaffification:
     def slice_target(self, Y):
         return Y
     
-class Mel2WordSimple__80MELS(BenchModelClaffification):
-    INPUT_SIZE = 80
+class Mel2WordSimple(BenchModelClaffification):
     OUTPUT_CLASSES = len(WORDS_REMAP)
     LEARNING_RATE = 0.0003
     BATCH_SIZE = 50
 
-    def __init__(self):
-        self.model = models_classification.Mel2WordSimple(self.INPUT_SIZE, self.OUTPUT_CLASSES).cuda()
+    def __init__(self, input_size, patient, regression_bench_model_name):
+        self.input_size = input_size
+        self.patient = patient
+        self.regression_bench_model_name = regression_bench_model_name
+        self.model = models_classification.Mel2WordSimple(self.input_size, self.OUTPUT_CLASSES).cuda()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
-        self.logger = LearningLogStorerClasification(SummaryWriter(comment=f"_{str(self.__class__.__name__)}"))
+        self.logger = LearningLogStorerClasification(SummaryWriter(comment=f"___classification___{self.patient['name']}___{regression_bench_model_name}"))

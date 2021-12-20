@@ -1,22 +1,6 @@
 import numpy as np
 import math
 
-DATA_FOLDER = '/home/pet67/ossadtchi/datasets/bioelectric_lab/speech_ecog_procenko/Procenko'
-
-FILES_LIST = [
-#     f'{DATA_FOLDER}/10_03_2021/Patient001_test0012021.03.10_20.29.47.hdf5',
-#     f'{DATA_FOLDER}/10_03_2021/Patient001_test0032021.03.10_20.40.15.hdf5',
-
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0042021.03.11_19.12.59.hdf5',
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0052021.03.11_19.26.24.hdf5',
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0062021.03.11_19.42.41.hdf5',
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0072021.03.11_20.40.02.hdf5',
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0082021.03.11_20.55.25.hdf5',
-    f'{DATA_FOLDER}/11_03_2021/Patient001_test0092021.03.11_21.10.53.hdf5',
-
-]
-
-SAMPLING_RATE = 19200
 
 MODEL_DUMPS_DIR = 'model_dumps'
 RESULTS_DIR = 'results'

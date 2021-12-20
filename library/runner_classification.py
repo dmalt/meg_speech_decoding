@@ -6,8 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from .runner_common import (FILES_LIST, SAMPLING_RATE, WORDS_REMAP, data_generator,
-                            MODEL_DUMPS_DIR, RESULTS_DIR, REGRESSION_MODE, CLASSIFICATION_MODE)
+from .runner_common import WORDS_REMAP, data_generator, MODEL_DUMPS_DIR, RESULTS_DIR, REGRESSION_MODE, CLASSIFICATION_MODE
 from . import bench_models_regression
 
 from . import bench_models_classification
@@ -23,14 +22,13 @@ import sklearn.preprocessing
 
 
 # TODO: REMOVE IT
-CLASSIFICATION_MODEL_CLASS = bench_models_classification.Mel2WordSimple__80MELS
-MAX_PHRASE_LENGTH = int(1 * SAMPLING_RATE / 10)
+CLASSIFICATION_MODEL_CLASS = bench_models_classification.Mel2WordSimple
 
 MAX_ITERATIONS_COUNT = 10_000
 METRIC_ITERATIONS = 1_000
+EARLY_STOP_STEPS = 5_000
 
 
-TEST_START_FILE_INDEX = 5
 
 # DEBUG
 
@@ -38,7 +36,7 @@ TEST_START_FILE_INDEX = 5
 # MAX_ITERATIONS_COUNT = 500
 # METRIC_ITERATIONS = 100
 
-def process_batch(bench_model, generator, is_train, iteration):
+def process_batch(bench_model, generator, is_train, iteration, max_words_length):
     loss_function = nn.CrossEntropyLoss()
     
     if is_train:
@@ -47,7 +45,7 @@ def process_batch(bench_model, generator, is_train, iteration):
         bench_model.model.eval()
 
     x_batch, y_batch = next(generator)
-    x_batch = prepare_x_batch_for_net(x_batch)
+    x_batch = prepare_x_batch_for_net(x_batch, max_words_length)
     non_silent_indexes = np.where(y_batch != 0)[0]
 
     assert x_batch.shape[0] == y_batch.shape[0]
@@ -101,11 +99,11 @@ def load_words_info(filepath):
     return phrases_info
 
 
-def get_random_predictions(bench_model, generator, iterations):
+def get_random_predictions(bench_model, generator, iterations, max_words_length):
     Y_batch = []
     Y_predicted = []
     for index, (x_batch, y_batch) in enumerate(generator):
-        x_batch = prepare_x_batch_for_net(x_batch)
+        x_batch = prepare_x_batch_for_net(x_batch, max_words_length)
         x_batch = torch.FloatTensor(x_batch).cuda()
         y_predicted = bench_model.model(x_batch).cpu().detach().numpy().argmax(axis=1)
         assert x_batch.shape[0]==y_predicted.shape[0]
@@ -181,77 +179,93 @@ def random_iterator(X, Y, batch_size=1):
         yield copy.deepcopy(X[current_indexes]), copy.deepcopy(Y[current_indexes])
     
 
-def prepare_x_batch_for_net(x_batch):
+def prepare_x_batch_for_net(x_batch, max_words_length):
     x_batch = [x.transpose() for x in x_batch]
     for i in range(len(x_batch)):
-        if x_batch[i].shape[1] >= MAX_PHRASE_LENGTH:
-            x_batch[i] = x_batch[i][:, :MAX_PHRASE_LENGTH]
+        if x_batch[i].shape[1] >= max_words_length:
+            x_batch[i] = x_batch[i][:, :max_words_length]
         else:
-            x_batch[i] = np.pad(x_batch[i], pad_width=[(0, 0), (0, MAX_PHRASE_LENGTH - x_batch[i].shape[1])])
+            x_batch[i] = np.pad(x_batch[i], pad_width=[(0, 0), (0, max_words_length - x_batch[i].shape[1])])
     return np.array(x_batch)
 
-def split_name(filename):
-    date_len = len("2021-09-12 06:15:49.595301")
-    json_len = len(".pth")
-    mode = filename.split("_")[0]
-    model_len = len(mode) + 1
-    date = filename[-(date_len+json_len):-json_len]
-    model_name = filename[model_len:-(date_len + json_len + 1)]
-    return mode, model_name, date
+def split_name(filename_):
+    filename = copy.deepcopy(filename_).split("/")[-1]
+    filename = ".".join(filename.split(".")[:-1])
+    mode, patient, model_name, date = filename.split("___")
+    return mode, patient, model_name, date
 
 
-def run_classification(regression_bench_model_name):
+def get_words_filepath(data_filepath):
+    return ".".join(data_filepath.split(".")[:-1]) + "_words.txt"
+
+
+def calc_max_words_length(X):
+    lenth_list = []
+    for file_x in X:
+        for x in file_x:
+            lenth_list.append(x.shape[0])
+    return int(np.percentile(lenth_list, 95))
+            
+    
+
+def run_classification(regression_bench_model_name, patient, is_debug=False):
     assert hasattr(bench_models_regression, regression_bench_model_name)
-    bench_regression_model = getattr(bench_models_regression, regression_bench_model_name)()
+    bench_regression_model = getattr(bench_models_regression, regression_bench_model_name)(patient)
 
     ecog_preprocessed_cache = []
-    for filepath in FILES_LIST:
+    for filepath in patient["files_list"]:
         with h5py.File(filepath,'r+') as input_file:
             data = input_file['RawData']['Samples'][()]
 
-        ecog = data[:, :30].astype("double")#[:DEBUG_DATA_LIMIT]
-        x = bench_regression_model.preprocess_ecog(ecog, SAMPLING_RATE).astype("float32")
+        ecog = data[:, patient["ecog_channels"]].astype("double")
+#         if is_debug:
+#             ecog = ecog[:DEBUG_DATA_LIMIT]
+        x = bench_regression_model.preprocess_ecog(ecog, patient["sampling_rate"]).astype("float32")
         ecog_preprocessed_cache.append(x)
-
+        if is_debug and len(ecog_preprocessed_cache) >= 2:
+            break
 
     all_models_files = []
 
     for filename in os.listdir(MODEL_DUMPS_DIR):
-        mode, model_name, date = split_name(filename)
-        if mode == REGRESSION_MODE and model_name == regression_bench_model_name:
+        if not filename.endswith(".pth"):
+            continue
+        mode, patient_name, model_name, date = split_name(filename)
+        if mode == REGRESSION_MODE and model_name == regression_bench_model_name and patient_name == patient["name"]:
             all_models_files.append(filename)
 
     for regression_model_filename in all_models_files:
-        bench_regression_model = getattr(bench_models_regression, regression_bench_model_name)()
+        bench_regression_model = getattr(bench_models_regression, regression_bench_model_name)(patient)
         assert regression_bench_model_name in regression_model_filename
         print("Start File:", regression_model_filename)
         
         regression_model_file_path = f"{MODEL_DUMPS_DIR}/{regression_model_filename}"
-        _, _, date = split_name(regression_model_filename)
+        _, patient_name, _,  date = split_name(regression_model_filename)
+        assert patient_name == patient["name"]
 
         bench_regression_model.model.load_state_dict(torch.load(regression_model_file_path))
 
         X = []
         Y = []
 
-        for index, filepath in enumerate(FILES_LIST):
+        for index, filepath in enumerate(patient["files_list"]):
             with h5py.File(filepath,'r+') as input_file:
                 data = input_file['RawData']['Samples'][()]
-            words_info = load_words_info(filepath[:-5] + "_words.txt")
-            
-              # debug
-#             debug_limit = 0
-#             for start, end, word in words_info:
-#                 if start > DEBUG_DATA_LIMIT:
-#                     break
-#                 debug_limit += 1 
-#             words_info = words_info[:debug_limit]
+            words_info = load_words_info(get_words_filepath(filepath))
+
+#             if is_debug: 
+#                 debug_limit = 0
+#                 for start, end, word in words_info:
+#                     if start > DEBUG_DATA_LIMIT:
+#                         break
+#                     debug_limit += 1 
+#                 words_info = words_info[:debug_limit]
 
             ecog = ecog_preprocessed_cache[index]
 
             x = predict_regression(bench_regression_model, ecog).astype("float32")
             x = sklearn.preprocessing.scale(x, copy=False)
-            x_frames, classes = prepare_frames(x, words_info, bench_regression_model.DOWNSAMPLING_COEF)
+            x_frames, classes = prepare_frames(x, words_info, bench_regression_model.downsampling_coef)
             x_frames = np.array(x_frames)
             classes = np.array(classes)
  
@@ -263,25 +277,29 @@ def run_classification(regression_bench_model_name):
 
             X.append(x_frames)
             Y.append(classes)
+            
+            if is_debug and len(X) >= 2:
+                break
+                
+                
+        max_words_length = calc_max_words_length(X)
+        print("max_words_length", max_words_length)
+                
+        test_start_file_index = TEST_START_FILE_INDEX if not is_debug else 1
+        X_train = np.concatenate(X[:test_start_file_index], axis=0)
+        Y_train = np.concatenate(Y[:test_start_file_index], axis=0)
 
-        X_train = np.concatenate(X[:TEST_START_FILE_INDEX], axis=0)
-        Y_train = np.concatenate(Y[:TEST_START_FILE_INDEX], axis=0)
+        X_val = np.concatenate(X[test_start_file_index:], axis=0)
+        Y_val = np.concatenate(Y[test_start_file_index:], axis=0)
 
-        X_val = np.concatenate(X[TEST_START_FILE_INDEX:], axis=0)
-        Y_val = np.concatenate(Y[TEST_START_FILE_INDEX:], axis=0)
-
-        X_test = np.concatenate(X[TEST_START_FILE_INDEX:], axis=0)
-        Y_test = np.concatenate(Y[TEST_START_FILE_INDEX:], axis=0)
-        
-#         print("X_train.shape", X_train.shape)
-#         print("X_train[0].shape", X_train[0].shape)
-#         print("Y_train.shape", Y_train.shape)
+        X_test = np.concatenate(X[test_start_file_index:], axis=0)
+        Y_test = np.concatenate(Y[test_start_file_index:], axis=0)
         
         assert X_train.shape[0] == Y_train.shape[0]
         assert X_val.shape[0] == Y_val.shape[0]
         assert X_test.shape[0] == Y_test.shape[0]
 
-        bench_model = CLASSIFICATION_MODEL_CLASS()
+        bench_model = CLASSIFICATION_MODEL_CLASS(bench_regression_model.OUTPUT_SIZE, patient, regression_bench_model_name)
         batch_size = bench_model.BATCH_SIZE
 
         train_generator = random_iterator(X_train, Y_train, batch_size)
@@ -289,27 +307,37 @@ def run_classification(regression_bench_model_name):
         test_generator = random_iterator(X_test, Y_test, batch_size)
 
         max_metric = -float("inf")
-        model_filename = f"{CLASSIFICATION_MODE}_{regression_bench_model_name}_{date}"
+        model_filename = f"{CLASSIFICATION_MODE}___{patient['name']}___{regression_bench_model_name}___{date}"
         model_path =  f"{MODEL_DUMPS_DIR}/{model_filename}.pth"
-        for iteration in range(MAX_ITERATIONS_COUNT):
-            process_batch(bench_model, train_generator, True, iteration)
+        max_iterations_count = MAX_ITERATIONS_COUNT if not is_debug else 1_000
+        best_iteration = 0
+        
+        for iteration in range(max_iterations_count):
+            process_batch(bench_model, train_generator, True, iteration, max_words_length)
             with torch.no_grad():
-                metrics = process_batch(bench_model, val_generator, False, iteration)
-                is_last_iteration = iteration == (MAX_ITERATIONS_COUNT - 1)
-                if (iteration % 2000 == 0 or is_last_iteration) and max_metric <= metrics["accuracy"]:
-                    max_metric = metrics["accuracy"]
-                    torch.save(bench_model.model.state_dict(), model_path)
+                metrics = process_batch(bench_model, val_generator, False, iteration, max_words_length)
+                is_last_iteration = iteration == (max_iterations_count - 1)
+                if iteration % 1000 == 0 or is_last_iteration:
+                    smoothed_metric = bench_model.logger.get_smoothed_value("accuracy")
+                    if smoothed_metric >= max_metric:
+                        max_metric = smoothed_metric
+                        best_iteration = iteration
+                        torch.save(bench_model.model.state_dict(), model_path)
+                    else:
+                        assert iteration >= best_iteration
+                        if (iteration - best_iteration) > EARLY_STOP_STEPS:
+                            print(f"Stopping model. Iteration {iteration} {round(smoothed_metric, 2)}. Best iteration {best_iteration} {round(max_metric, 2)}.")
 
         bench_model.model.load_state_dict(torch.load(model_path))
         bench_model.model.eval()
 
         result = {}
-        result["train_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, train_generator, METRIC_ITERATIONS)))
-        result["val_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, val_generator, METRIC_ITERATIONS)))
-        result["test_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, test_generator, METRIC_ITERATIONS)))
+        result["train_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, train_generator, METRIC_ITERATIONS, max_words_length)))
+        result["val_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, val_generator, METRIC_ITERATIONS, max_words_length)))
+        result["test_accuracy"] = float(accuracy_score(*get_random_predictions(bench_model, test_generator, METRIC_ITERATIONS, max_words_length)))
         result["train_logs"] = bench_model.logger.train_logs
         result["val_logs"] = bench_model.logger.test_logs
-        result["iterations"] = MAX_ITERATIONS_COUNT
+        result["iterations"] = iteration
 
         with open(f'{RESULTS_DIR}/{model_filename}.json', 'w') as result_file:
             json.dump(result, result_file)

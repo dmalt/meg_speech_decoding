@@ -1,3 +1,4 @@
+import numpy as np
 
 class LearningLogStorerBase:
     def add_value(self, name, is_train, value, iteration):
@@ -9,6 +10,10 @@ class LearningLogStorerBase:
         else:
             self.test_logs[name].append((iteration, value))
         return
+    
+    def get_smoothed_value(self, name, window=100):
+        return np.mean([value for iteration, value in self.test_logs[name][-window:]])
+            
 
 
 class LearningLogStorer(LearningLogStorerBase):

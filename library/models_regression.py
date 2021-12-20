@@ -72,106 +72,106 @@ class SimpleNet(nn.Module):
         return output
     
 #################################
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, ngroups, group_size, dropout=0.1):
-        super(self.__class__,self).__init__()
+# class ConvBlock(nn.Module):
+#     def __init__(self, in_channels, ngroups, group_size, dropout=0.1):
+#         super(self.__class__,self).__init__()
 
-        base = np.array([2**i - 1 for i in range(ngroups+2)])
-        k = base[2:]
-        p = base[1:-1]
-        nchan = ngroups * group_size
+#         base = np.array([2**i - 1 for i in range(ngroups+2)])
+#         k = base[2:]
+#         p = base[1:-1]
+#         nchan = ngroups * group_size
 
-        self.layers = nn.ModuleList()
-        for i in range(ngroups):
-            conv = nn.Conv1d(in_channels=in_channels, out_channels=group_size, kernel_size=k[i], padding=p[i])
-            self.layers.append(conv)
-        self.relu = nn.ReLU()
-        self.shuffle = nn.Conv1d(in_channels=nchan, out_channels=in_channels, kernel_size=1)
+#         self.layers = nn.ModuleList()
+#         for i in range(ngroups):
+#             conv = nn.Conv1d(in_channels=in_channels, out_channels=group_size, kernel_size=k[i], padding=p[i])
+#             self.layers.append(conv)
+#         self.relu = nn.ReLU()
+#         self.shuffle = nn.Conv1d(in_channels=nchan, out_channels=in_channels, kernel_size=1)
 
-        self.dropout = nn.Dropout(dropout)
-        self.residual = nn.Conv1d(in_channels=in_channels, out_channels=nchan, kernel_size=1)
+#         self.dropout = nn.Dropout(dropout)
+#         self.residual = nn.Conv1d(in_channels=in_channels, out_channels=nchan, kernel_size=1)
 
-    def forward(self, inputs):
+#     def forward(self, inputs):
         
-        res = self.residual(inputs)
-        x = []
-        for layer in self.layers:
-            x.append(layer(inputs))
-        x = torch.cat(x, dim=1)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = x + res
-        x = self.shuffle(x)
-        x = self.relu(x)
+#         res = self.residual(inputs)
+#         x = []
+#         for layer in self.layers:
+#             x.append(layer(inputs))
+#         x = torch.cat(x, dim=1)
+#         x = self.relu(x)
+#         x = self.dropout(x)
+#         x = x + res
+#         x = self.shuffle(x)
+#         x = self.relu(x)
 
-        return x
+#         return x
     
-class FeatureExtractor(nn.Module):
-    def __init__(self, frame_total, stride):
-        super(self.__class__,self).__init__()
+# class FeatureExtractor(nn.Module):
+#     def __init__(self, frame_total, stride):
+#         super(self.__class__,self).__init__()
 
-        k_out = frame_total // stride - 3
+#         k_out = frame_total // stride - 3
 
-        ngroups = 4
-        group_size = 15
-        nchan = ngroups*group_size
+#         ngroups = 4
+#         group_size = 15
+#         nchan = ngroups*group_size
 
-        self.feature_extractor = nn.ModuleList()
+#         self.feature_extractor = nn.ModuleList()
 
-        self.feature_extractor.append(nn.Conv1d(in_channels=6, out_channels=5, kernel_size=1))
+#         self.feature_extractor.append(nn.Conv1d(in_channels=6, out_channels=5, kernel_size=1))
 
-        self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
-        self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
-        self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
+#         self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
+#         self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
+#         self.feature_extractor.append(ConvBlock(5, ngroups, group_size, dropout=0.4))
 
-        self.feature_extractor.append(nn.Conv1d(in_channels=5, out_channels=nchan, kernel_size=1))
-        self.feature_extractor.append(nn.AvgPool1d(kernel_size=88, stride=22))
+#         self.feature_extractor.append(nn.Conv1d(in_channels=5, out_channels=nchan, kernel_size=1))
+#         self.feature_extractor.append(nn.AvgPool1d(kernel_size=88, stride=22))
 
-        self.feature_extractor.append(nn.Conv1d(in_channels=nchan, out_channels=80, kernel_size=k_out))
-        self.feature_extractor.append(nn.ReLU(inplace=True))
+#         self.feature_extractor.append(nn.Conv1d(in_channels=nchan, out_channels=80, kernel_size=k_out))
+#         self.feature_extractor.append(nn.ReLU(inplace=True))
 
-    def forward(self, inputs):
+#     def forward(self, inputs):
 
-        x = inputs
-        for layer in self.feature_extractor:
-            x = layer(x)
-            #print(x.size())
+#         x = inputs
+#         for layer in self.feature_extractor:
+#             x = layer(x)
+#             #print(x.size())
 
-        return x
+#         return x
     
-class Encoder(nn.Module):
-    N_MELS = 80
+# class Encoder(nn.Module):
+#     N_MELS = 80
     
-    def __init__(self, frame_total, stride):
-        super(self.__class__,self).__init__()
+#     def __init__(self, frame_total, stride):
+#         super(self.__class__,self).__init__()
 
-        # (B, )
-        self.feature_extractor = FeatureExtractor(frame_total, stride)
+#         # (B, )
+#         self.feature_extractor = FeatureExtractor(frame_total, stride)
 
-        self.lstm = nn.LSTM(80, 80, num_layers=1, batch_first=True, bidirectional=False)
-        self.lstm_dropout = nn.Dropout(0.3)
+#         self.lstm = nn.LSTM(80, 80, num_layers=1, batch_first=True, bidirectional=False)
+#         self.lstm_dropout = nn.Dropout(0.3)
 
-        self.regressor = nn.Sequential(
-            nn.Linear(80, 80),
-            nn.ReLU(inplace=True),
-            nn.Linear(80, self.N_MELS)
-        )
+#         self.regressor = nn.Sequential(
+#             nn.Linear(80, 80),
+#             nn.ReLU(inplace=True),
+#             nn.Linear(80, self.N_MELS)
+#         )
 
-    def forward(self, inputs):
-        #inputs = x.transpose(1, 2)
+#     def forward(self, inputs):
+#         #inputs = x.transpose(1, 2)
 
-        # (B, nchannels, eeg_d) -> (B, e_d, s_d)
-        x = self.feature_extractor(inputs)
+#         # (B, nchannels, eeg_d) -> (B, e_d, s_d)
+#         x = self.feature_extractor(inputs)
 
-        # (B, e_d, s_d) -> (B, s_d, e_d)
-        x = x.transpose(1, 2)
+#         # (B, e_d, s_d) -> (B, s_d, e_d)
+#         x = x.transpose(1, 2)
 
-        self.lstm.flatten_parameters()
-        x, _ = self.lstm(x)
+#         self.lstm.flatten_parameters()
+#         x, _ = self.lstm(x)
         
-        x = self.lstm_dropout(x)
+#         x = self.lstm_dropout(x)
 
-        # (B, s_d, e_d) -> (B, s_d, nmel)
-        outputs = self.regressor(x)
+#         # (B, s_d, e_d) -> (B, s_d, nmel)
+#         outputs = self.regressor(x)
 
-        return outputs[:, 0, :]
+#         return outputs[:, 0, :]
