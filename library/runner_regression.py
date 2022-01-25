@@ -87,7 +87,7 @@ def get_random_predictions(model, generator, iterations):
 
 
 def run_regression(bench_model_name, patient, runs_count=1, is_debug=False):
-    assert hasattr(bench_models_regression, bench_model_name)
+    assert hasattr(bench_models_regression, bench_model_name), f"No such model:{bench_model_name}"
     bench_model = getattr(bench_models_regression, bench_model_name)(patient)
 
     X = []
@@ -149,7 +149,7 @@ def run_regression(bench_model_name, patient, runs_count=1, is_debug=False):
                 metrics = process_batch(bench_model, val_generator, False, iteration)
                 is_last_iteration = iteration == (max_iterations_count - 1)
                 if iteration % 1000 == 0 or is_last_iteration:
-                    smoothed_metric = bench_model.get_smoothed_value("correlation")
+                    smoothed_metric = bench_model.logger.get_smoothed_value("correlation")
                     smoothed_metric_speech = bench_model.logger.get_smoothed_value("correlation_speech")
                     if smoothed_metric >= max_metric or smoothed_metric_speech >= max_metric_speech:
                         max_metric = max(smoothed_metric, max_metric)
