@@ -283,9 +283,9 @@ def run_classification(regression_bench_model_name, patient, is_debug=False):
                 
                 
         max_words_length = calc_max_words_length(X)
-        print("max_words_length", max_words_length)
-                
-        test_start_file_index = TEST_START_FILE_INDEX if not is_debug else 1
+        bench_model = CLASSIFICATION_MODEL_CLASS(bench_regression_model.OUTPUT_SIZE, patient, regression_bench_model_name)
+
+        test_start_file_index = bench_model.TEST_START_FILE_INDEX if not is_debug else 1
         X_train = np.concatenate(X[:test_start_file_index], axis=0)
         Y_train = np.concatenate(Y[:test_start_file_index], axis=0)
 
@@ -299,7 +299,7 @@ def run_classification(regression_bench_model_name, patient, is_debug=False):
         assert X_val.shape[0] == Y_val.shape[0]
         assert X_test.shape[0] == Y_test.shape[0]
 
-        bench_model = CLASSIFICATION_MODEL_CLASS(bench_regression_model.OUTPUT_SIZE, patient, regression_bench_model_name)
+        
         batch_size = bench_model.BATCH_SIZE
 
         train_generator = random_iterator(X_train, Y_train, batch_size)

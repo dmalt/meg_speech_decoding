@@ -93,11 +93,11 @@ def extract_melspectrogram(sound, sampling_rate, downsampling_coef, out_length, 
     return
 
 
-def extract_lpcs(sound, order, window_size, hop_size, out_length, win_length):
+def extract_lpcs(sound, order, window_size, hop_size, out_length):
     half_window = int(window_size / 2)
     sound_padded = np.pad(sound, (half_window, half_window))
     lpcs = [librosa.lpc(sound_padded[i-half_window:i+half_window+1], order) for i in range(half_window, len(sound_padded) - half_window+1, hop_size)]
-    lpcs = np.array(lpcs)
+    lpcs = np.array(lpcs)[:, 1:]
     # todo: remove this terrible ifs 
     if lpcs.shape[0] == out_length:
         return lpcs
@@ -106,6 +106,12 @@ def extract_lpcs(sound, order, window_size, hop_size, out_length, win_length):
     else:
         raise ValueError
     return
+
+
+def extract_mfccs(sound, sampling_rate, downsampling_coef, out_length, n_mfcc):
+    mfccs = librosa.feature.mfcc(y=sound, sr=sampling_rate, hop_length=downsampling_coef, n_mfcc=n_mfcc)
+    mfccs_resampled = scipy.signal.resample(x=mfccs.T, num=out_length)
+    return mfccs_resampled
 
 
 # Here complex preprocessing function starts
@@ -123,3 +129,17 @@ def classic_melspectrogram_pipeline(sound, sampling_rate, downsampling_coef, eco
     melspectrogram = extract_melspectrogram(sound, sampling_rate, downsampling_coef, ecog_size, f_max, n_mels)
     melspectrogram = sklearn.preprocessing.scale(melspectrogram)
     return melspectrogram
+
+
+def classic_lpc_pipeline(sound, sampling_rate, downsampling_coef, ecog_size, order):
+    WIN_LENGTH = 1001
+    sound /= np.max(np.abs(sound))
+    lpcs = extract_lpcs(sound, order, WIN_LENGTH, downsampling_coef, ecog_size)
+    lpcs = sklearn.preprocessing.scale(lpcs)
+    return lpcs
+
+def classic_mfcc_pipeline(sound, sampling_rate, downsampling_coef, ecog_size, n_mfcc):
+    sound /= np.max(np.abs(sound))
+    mfccs = extract_mfccs(sound, sampling_rate, downsampling_coef, ecog_size, n_mfcc)
+    mfccs = sklearn.preprocessing.scale(mfccs)
+    return mfccs

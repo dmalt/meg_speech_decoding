@@ -175,3 +175,78 @@ class SimpleNet(nn.Module):
 #         outputs = self.regressor(x)
 
 #         return outputs[:, 0, :]
+
+
+
+class DenseBlock(nn.Module):
+    def __init__(self, in_channels, growth_rate, dense_block_layers, filter_size):
+        super(DenseBlock, self).__init__()
+        self.in_channels = in_channels
+        self.dense_block_layers = dense_block_layers
+
+        self.conv_layers = nn.ModuleList()
+        for _ in range(self.dense_block_layers):
+            out_channels = in_channels + growth_rate
+            self.conv_layers.append(nn.Sequential(
+                nn.BatchNorm1d(in_channels),
+                nn.ReLU(),
+                nn.Conv1d(in_channels, growth_rate, kernel_size=filter_size, padding=int(filter_size / 2)),
+            ))
+            in_channels = out_channels
+        self.out_channels = out_channels
+
+    def forward(self, x):
+        all_outputs = x
+        for i in range(self.dense_block_layers):
+            current_out = self.conv_layers[i](all_outputs)
+            all_outputs = torch.cat((all_outputs, current_out), 1)
+        return all_outputs
+
+
+class DenseNet(nn.Module):
+    DENSE_BLOCKS = 3
+    DENSE_BLOCKS_LAYERS = 4
+    FILTERS_SIZE = 15
+    TRANSTION_MEAN_POOL_SIZE = 2
+    HIDDEN_CHANNELS = 50
+    GROWTH_RATE = 25
+
+    def __init__(self, in_channels, out_channels, lag_backward, lag_forward):
+        super(DenseNet, self).__init__()
+        
+        self.dense_blocks_list = nn.ModuleList()
+        self.transition_blocks_list = nn.ModuleList()
+
+        self.unmixing_layer = nn.Conv1d(in_channels, self.HIDDEN_CHANNELS, 1)
+
+        for i in range(self.DENSE_BLOCKS):
+            self.dense_blocks_list.append(DenseBlock(self.HIDDEN_CHANNELS, self.GROWTH_RATE, self.DENSE_BLOCKS_LAYERS, self.FILTERS_SIZE))
+            self.transition_blocks_list.append(self._create_transition_layer(self.dense_blocks_list[-1].out_channels, self.HIDDEN_CHANNELS))
+
+        self.final_out_features = 6250  # KOSTYL
+
+        self.features_batchnorm = torch.nn.BatchNorm1d(self.final_out_features, affine=False)
+        self.fc_layer = nn.Linear(self.final_out_features, out_channels) 
+        self.lstm = nn.LSTM(50, int(50 / 2), num_layers=1, batch_first=True, bidirectional=True)
+
+    def _create_transition_layer(self, in_channels, out_channels):
+        return nn.Sequential(
+                nn.BatchNorm1d(in_channels),
+                nn.ReLU(),
+                nn.Conv1d(in_channels, out_channels, kernel_size=1),
+                nn.AvgPool1d(self.TRANSTION_MEAN_POOL_SIZE)
+            )
+
+    def forward(self, x):
+        unmixed_channels = self.unmixing_layer(x)
+        dense_block_out = unmixed_channels
+        for i in range(self.DENSE_BLOCKS):
+            dense_block_out = self.dense_blocks_list[i](dense_block_out)
+            dense_block_out = self.transition_blocks_list[i](dense_block_out)
+
+        features = dense_block_out
+        features = self.lstm(features.transpose(1, 2))[0].transpose(1, 2)
+        features = features.reshape((features.shape[0], -1))
+        features_scaled = self.features_batchnorm(features)
+        output = self.fc_layer(features_scaled)
+        return output
