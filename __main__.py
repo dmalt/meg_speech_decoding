@@ -24,6 +24,12 @@ def parse_args():
 
 if __name__ == '__main__':
     parsed_args = parse_args()
+    
+    for dir_name in ["results", "model_dumps"]:
+        if not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+            print(f"{dir_name} dir created")
+    
     patients_dict = {}
     with open("library/patients.json", "r") as patients_file:
         for patient in json.load(patients_file):
