@@ -119,7 +119,7 @@ def extract_mfccs(sound, sampling_rate, downsampling_coef, out_length, n_mfcc):
 def classic_ecog_pipeline(ecog, sampling_rate, downsampling_coef, low_pass_hz, high_pass_hz):
     ecog = scipy.signal.decimate(ecog, downsampling_coef, axis=0)
     ecog = remove_eyes_artifacts(ecog, int(sampling_rate / downsampling_coef), high_pass_hz)
-    ecog = notch_filtering_advanced(ecog, sampling_rate)
+    ecog = notch_filtering_advanced(ecog, int(sampling_rate / downsampling_coef))
     ecog = remove_target_leakage(ecog, int(sampling_rate / downsampling_coef), low_pass_hz)
     ecog = sklearn.preprocessing.scale(ecog, copy=False)
     return ecog
