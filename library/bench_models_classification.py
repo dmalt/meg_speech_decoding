@@ -1,10 +1,10 @@
-from . import models_classification
-from .runner_common import WORDS_REMAP
-from .loggers import LearningLogStorerClasification
-
+import torch
 from torch.utils.tensorboard import SummaryWriter
 
-import torch
+from . import models_classification
+from .loggers import LearningLogStorerClasification
+from .runner_common import WORDS_REMAP
+
 
 class BenchModelClassification:
     def __init__(self, input_shape, output_shape, frequency):
@@ -18,7 +18,8 @@ class BenchModelClassification:
 
     def slice_target(self, Y):
         return Y
-    
+
+
 class Mel2WordSimple(BenchModelClassification):
     OUTPUT_CLASSES = len(WORDS_REMAP)
     LEARNING_RATE = 0.0003
@@ -27,8 +28,20 @@ class Mel2WordSimple(BenchModelClassification):
     def __init__(self, input_size, patient, regression_bench_model_name):
         self.input_size = input_size
         self.patient = patient
-        self.TEST_START_FILE_INDEX = self.patient["test_start_file_classification_index"]
+        self.TEST_START_FILE_INDEX = self.patient[
+            "test_start_file_classification_index"
+        ]
         self.regression_bench_model_name = regression_bench_model_name
-        self.model = models_classification.Mel2WordSimple(self.input_size, self.OUTPUT_CLASSES).cuda()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.LEARNING_RATE)
-        self.logger = LearningLogStorerClasification(SummaryWriter(comment=f"___classification___{self.patient['name']}___{regression_bench_model_name}"))
+        self.model = models_classification.Mel2WordSimple(
+            self.input_size, self.OUTPUT_CLASSES
+        )
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=self.LEARNING_RATE
+        )
+        self.logger = LearningLogStorerClasification(
+            SummaryWriter(
+                comment=f"___classification___{self.patient['name']}___{regression_bench_model_name}"
+            )
+        )
