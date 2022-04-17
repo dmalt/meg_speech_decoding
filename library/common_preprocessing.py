@@ -1,12 +1,15 @@
-import math
+from __future__ import annotations
 
-import librosa
-import numpy as np
-import scipy
-import scipy.io
-import scipy.signal
-import sklearn
-import sklearn.preprocessing
+from dataclasses import dataclass
+
+import librosa as lb  # type: ignore
+import librosa.feature as lbf  # type: ignore
+import numpy as np  # type: ignore
+import scipy  # type: ignore
+import scipy.io  # type: ignore
+import scipy.signal  # type: ignore
+import sklearn  # type: ignore
+import sklearn.preprocessing  # type: ignore
 
 
 def notch_filtering_simple(ecog, frequency):
@@ -98,32 +101,11 @@ def remove_silent_noise(sound, frequency):
     return sound_without_noise
 
 
-def extract_melspectrogram(
-    sound, sampling_rate, downsampling_coef, out_length, f_max, n_mels
-):
-    melspectrogram = librosa.feature.melspectrogram(
-        y=sound,
-        sr=sampling_rate,
-        n_mels=n_mels,
-        fmax=f_max,
-        hop_length=downsampling_coef,
-    )
-    melspectrogram = librosa.power_to_db(melspectrogram, ref=np.max).T
-    # todo: remove this terrible ifs
-    if melspectrogram.shape[0] == out_length:
-        return melspectrogram
-    elif melspectrogram.shape[0] - 1 == out_length:
-        return melspectrogram[:-1]
-    else:
-        raise ValueError
-    return
-
-
 def extract_lpcs(sound, order, window_size, hop_size, out_length):
     half_window = int(window_size / 2)
     sound_padded = np.pad(sound, (half_window, half_window))
     lpcs = [
-        librosa.lpc(sound_padded[i - half_window : i + half_window + 1], order)
+        lb.lpc(sound_padded[i - half_window : i + half_window + 1], order)
         for i in range(
             half_window, len(sound_padded) - half_window + 1, hop_size
         )
@@ -140,7 +122,7 @@ def extract_lpcs(sound, order, window_size, hop_size, out_length):
 
 
 def extract_mfccs(sound, sampling_rate, downsampling_coef, out_length, n_mfcc):
-    mfccs = librosa.feature.mfcc(
+    mfccs = lbf.mfcc(
         y=sound, sr=sampling_rate, hop_length=downsampling_coef, n_mfcc=n_mfcc
     )
     mfccs_resampled = scipy.signal.resample(x=mfccs.T, num=out_length)
@@ -149,33 +131,54 @@ def extract_mfccs(sound, sampling_rate, downsampling_coef, out_length, n_mfcc):
 
 # Here complex preprocessing function starts
 
+@dataclass
+class ClassicEcogPipeline:
+    dsamp_coef: int
+    lowpass: float
+    highpass: float
+    selected_channels: list[int]
 
-def classic_ecog_pipeline(
-    ecog, sampling_rate, downsampling_coef, low_pass_hz, high_pass_hz
-):
-    ecog = scipy.signal.decimate(ecog, downsampling_coef, axis=0)
-    ecog = remove_eyes_artifacts(
-        ecog, int(sampling_rate / downsampling_coef), high_pass_hz
-    )
-    ecog = notch_filtering_advanced(
-        ecog, int(sampling_rate / downsampling_coef)
-    )
-    ecog = remove_target_leakage(
-        ecog, int(sampling_rate / downsampling_coef), low_pass_hz
-    )
-    ecog = sklearn.preprocessing.scale(ecog, copy=False)
-    return ecog
+    def __call__(self, ecog, sr):
+        ecog = scipy.signal.decimate(ecog, self.dsamp_coef, axis=0)
+        new_sr = int(sr / self.dsamp_coef)
+        ecog = remove_eyes_artifacts(ecog, new_sr, self.highpass)
+        ecog = notch_filtering_advanced(ecog, new_sr)
+        ecog = remove_target_leakage(ecog, new_sr, self.lowpass)
+        ecog = sklearn.preprocessing.scale(ecog, copy=False)
+        return ecog.astype("float32")[:, self.selected_channels]
 
 
-def classic_melspectrogram_pipeline(
-    sound, sampling_rate, downsampling_coef, ecog_size, n_mels, f_max
-):
-    sound /= np.max(np.abs(sound))
-    melspectrogram = extract_melspectrogram(
-        sound, sampling_rate, downsampling_coef, ecog_size, f_max, n_mels
-    )
-    melspectrogram = sklearn.preprocessing.scale(melspectrogram)
-    return melspectrogram
+@dataclass
+class ClassicMelspectrogramPipeline:
+    dsamp_coef: int
+    n_mels: int
+    f_max: float
+
+    def __call__(self, sound, sr, out_length):
+        sound /= np.max(np.abs(sound))
+        m = self.extract_melspectrogram(sound, sr, out_length)
+        m = sklearn.preprocessing.scale(m).astype("float32")
+        if m.ndim == 1:
+            m = m.reshape((-1, 1))
+        return m
+
+    def extract_melspectrogram(self, sound, sr, out_length):
+        melspec = lbf.melspectrogram(
+            y=sound,
+            sr=sr,
+            n_mels=self.n_mels,
+            fmax=self.f_max,
+            hop_length=self.dsamp_coef,
+        )
+        logmelspec = lb.power_to_db(melspec, ref=np.max).T
+        # todo: remove this terrible ifs
+        if logmelspec.shape[0] == out_length:
+            return logmelspec
+        elif logmelspec.shape[0] - 1 == out_length:
+            return logmelspec[:-1]
+        else:
+            raise ValueError
+        return
 
 
 def classic_lpc_pipeline(
