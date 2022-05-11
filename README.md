@@ -1,14 +1,35 @@
-# Quickstart
-Классификация слов из ecog разделена на 2 этапа: 1) Востановление мел-спектрограммы звука из ecog 2) Классификация слов по востановленной мел-спектрограмме.
+Installation
+------------
+Setup conda virtual env following the instructions [here](https://github.com/dmalt/speech_decoding_setup)
 
+Launch
+------
+First, activate the environment with
+```
+conda activate speech3.8
+```
 
-Что нужно для запуска:
+Training is launched via `main.py`'s CLI interface, which is provided by [hydra](https://hydra.cc/) e.g.
+```
+python main.py +experiment=meg_all_sensors
+```
 
-0. Сервер с 32Гб и больше оперативной памяти.
-1. Скачать [данные](https://drive.google.com/drive/folders/1sTybLiuLDar8VNZtAoAjfSQffqXgpWmH?usp=sharing) по пациентам и указать путь до файлов [тут](https://github.com/pet67/ossadtchi-ml-test-bench-speech/blob/master/library/patients.json#L5-L10).
-2. Скачать разметку на слова и положить рядом с файлами пациентов. [patient 1](https://drive.google.com/file/d/1R-k8F_ce8PNPX4RZ9XbGHDRq4cbcVzIW/view?usp=sharing) [patient 2](https://drive.google.com/file/d/1luJYLok_JQifALgHd96ifZ6shh3tr18k/view?usp=sharing)
-3. Запустить [этот](https://github.com/pet67/ossadtchi-ml-test-bench-speech/blob/master/run_example.sh) скрипт: export CUDA_VISIBLE_DEVICES=0 && ./run_example.sh
+Model dump, tensorboard stats, logs etc. are saved in `outputs/` under
+unuque date and time subfolders.
 
+Configuration
+-------------
+- Possible configurations are available at `configs/`.
+- Changes to configuration should be made via creating an experiment in `configs/experiment/`
 
+Ecog data download
+------------------
 
-Результат выполнения: json файл с логом обучения и с финальной метрикой качества
+Ecog data can be downloaded from GDrive with
+```
+./download_data.sh
+```
+
+Files are automatically saved under `$HOME/Data/speech_dl/Procenko`.
+Make sure to change the configuration for launch
+
