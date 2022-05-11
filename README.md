@@ -9,7 +9,7 @@ First, activate the environment with
 conda activate speech3.8
 ```
 
-Training is launched via `main.py`'s CLI interface, which is provided by [hydra](https://hydra.cc/) e.g.
+Training is launched via `main.py`'s CLI interface, which is provided by [hydra](https://hydra.cc/), e.g.
 ```
 python main.py +experiment=meg_all_sensors
 ```
