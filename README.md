@@ -22,6 +22,15 @@ Configuration
 - Possible configurations are available at `configs/`.
 - Changes to configuration should be made via creating an experiment in `configs/experiment/`
 
+
+Interpretable weights visualization
+-----------------------------------
+Select model's date and time in `run_interpreter.py` and launch it with
+
+```
+python run_interpreter.py
+```
+
 Ecog data download
 ------------------
 
