@@ -1,7 +1,7 @@
-import math
+from typing import Generator, Iterable
 
-import h5py
-import numpy as np
+import numpy as np  # type: ignore
+import torch  # type: ignore
 
 MODEL_DUMPS_DIR = "model_dumps"
 RESULTS_DIR = "results"
@@ -41,38 +41,34 @@ WORDS_REMAP = {
 }
 
 
-def data_generator(
-    X, Y, batch_size, lag_backward, lag_forward, shuffle=True, infinite=True
-):
-    assert len(X) == len(Y) or len(Y) == 0
-    total_lag = lag_backward + lag_forward
-    all_batches = math.ceil((X.shape[0] - total_lag) / batch_size)
-    samples_in_last_batch = (X.shape[0] - total_lag) % batch_size
-    batch = 0
-    random_core = np.arange(lag_backward, X.shape[0] - lag_forward)
-    while True:
-        if shuffle:
-            np.random.shuffle(random_core)
-        for batch in range(all_batches):
-            batch_start = batch * batch_size
-            batch_end = (batch + 1) * batch_size
-            if batch_end >= len(random_core):
-                batch_end = None
-            batch_samples = random_core[batch_start:batch_end]
+def data_generator(*pargs, **kwargs):
+    # keep this temporarily till further refactoring
+    pass
 
-            batch_x = np.array(
-                [
-                    X[i - lag_backward : i + lag_forward + 1]
-                    for i in batch_samples
-                ]
-            )
-            batch_x = np.swapaxes(batch_x, 1, 2)
 
-            if len(Y) > 0:
-                batch_y = Y[[batch_samples]]
-                yield (batch_x, batch_y)
-            else:
-                yield batch_x
-
-        if not infinite:
+def get_random_predictions(model, generator, iterations):
+    Y_batch = []
+    Y_predicted = []
+    for index, (x_batch, y_batch) in enumerate(generator):
+        x_batch = torch.FloatTensor(x_batch)
+        if torch.cuda.is_available():
+            x_batch = x_batch.cuda()
+        y_predicted = model(x_batch).cpu().detach().numpy()
+        assert x_batch.shape[0] == y_predicted.shape[0]
+        Y_predicted.append(y_predicted)
+        Y_batch.append(y_batch)
+        if index > iterations:
             break
+
+    Y_predicted = np.concatenate(Y_predicted, axis=0)
+    Y_batch = np.concatenate(Y_batch, axis=0)
+    return Y_batch, Y_predicted
+
+
+def infinite(x: Iterable) -> Generator:
+    while True:
+        iterator = iter(x)
+        for item in iterator:
+            yield item
+
+

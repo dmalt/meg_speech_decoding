@@ -1,116 +1,39 @@
-import numpy as np
-import torch
+import numpy as np  # type: ignore
+import torch  # type: ignore
 from torch.utils.tensorboard import SummaryWriter
 
 from . import common_preprocessing
 from .loggers import LearningLogStorer
-from .models_regression import DenseNet, SimpleNet
+from .models_regression import DenseNet
 
 
 class BenchModelRegressionBase:
-    BATCH_SIZE = 100
-    DOWNSAMPED_APPROX_SAMPLING_RATE = 1000
-    LEARNING_RATE = 0.0003
-
-    HIGH_PASS_HZ = 10
-    LOW_PASS_HZ = 200
-
-    def __init__(self, patient):
-        self.patient = patient
-        self.calc_downsampling_coef()
-        self.TEST_START_FILE_INDEX = self.patient[
-            "test_start_file_regression_index"
-        ]
-        self.selected_channels = (
-            self.SELECTED_CHANNELS
-            if self.SELECTED_CHANNELS is not None
-            else self.patient["ecog_channels"]
-        )
-        self.input_size = len(self.selected_channels)
-        self.init()
-        assert hasattr(self, "model")
-        self.create_optimizer()
+    def __init__(self, model, learning_rate):
+        # self.input_size = len(self.selected_channels)
+        self.model = model
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+        self.create_optimizer(learning_rate)
         self.create_logger()
 
-    def init(self):
-        # model
-        raise NotImplementedError
-
-    def calc_downsampling_coef(
-        self,
-    ):
-        self.downsampling_coef = round(
-            self.patient["sampling_rate"]
-            / self.DOWNSAMPED_APPROX_SAMPLING_RATE
-        )
-
-    def create_logger(
-        self,
-    ):
+    def create_logger(self):
         self.logger = LearningLogStorer(
-            SummaryWriter(
-                comment=f"___regression___{self.patient['name']}___{str(self.__class__.__name__)}"
-            )
+            SummaryWriter(comment=f"{str(self.__class__.__name__)}")
         )
 
-    def create_optimizer(
-        self,
-    ):
+    def create_optimizer(self, learning_rate):
         self.optimizer = torch.optim.Adam(
-            self.model.parameters(), lr=self.LEARNING_RATE
+            self.model.parameters(), lr=learning_rate
         )
-
-    def preprocess_ecog(self, ecog):
-        raise NotImplementedError
-
-    def preprocess_sound(self, sound):
-        raise NotImplementedError
-
-    def detect_voice(self, y_batch):
-        raise NotImplementedError
 
 
 class SimpleNetBase(BenchModelRegressionBase):
     def init(self):
-        self.model = SimpleNet(
-            self.input_size,
-            self.OUTPUT_SIZE,
-            self.LAG_BACKWARD,
-            self.LAG_FORWARD,
-        )
-        if torch.cuda.is_available():
-            self.model = self.model.cuda()
-
-    def preprocess_ecog(self, ecog, sampling_rate):
-        assert self.patient["sampling_rate"] == sampling_rate
-        selected_channels = (
-            self.SELECTED_CHANNELS
-            if self.SELECTED_CHANNELS is not None
-            else self.patient["ecog_channels"]
-        )
-        return common_preprocessing.classic_ecog_pipeline(
-            ecog,
-            self.patient["sampling_rate"],
-            self.downsampling_coef,
-            self.LOW_PASS_HZ,
-            self.HIGH_PASS_HZ,
-        )[:, selected_channels]
+        pass
 
 
 class SimpleNetMelsBase(SimpleNetBase):
-    def preprocess_sound(self, sound, sampling_rate, ecog_size):
-        # assert self.patient["sampling_rate"] == sampling_rate
-        return common_preprocessing.classic_melspectrogram_pipeline(
-            sound,
-            sampling_rate,
-            self.downsampling_coef,
-            ecog_size,
-            self.N_MELS,
-            self.F_MAX,
-        )
-
-    def detect_voice(self, y_batch):
-        return np.sum(y_batch > 1, axis=1) > int(self.N_MELS * 0.25)
+    pass
 
 
 class SimpleNetMels40Base(SimpleNetMelsBase):

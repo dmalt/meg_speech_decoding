@@ -1,63 +1,68 @@
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import numpy as np  # type: ignore
+import torch  # type: ignore
+import torch.nn as nn  # type: ignore
 
 
 class SimpleNet(nn.Module):
-    DOWNSAMPLING = 10
-    HIDDEN_CHANNELS = 30
-    FILTERING_SIZE = 25
-    ENVELOPE_SIZE = 15
-    FC_HIDDEN_FEATURES = 100
-
-    assert FILTERING_SIZE % 2 == 1, "conv weights must be odd"
-    assert ENVELOPE_SIZE % 2 == 1, "conv weights must be odd"
-
     def __init__(
         self,
-        in_channels,
-        out_channels,
-        lag_backward,
-        lag_forward,
-        use_lstm=True,
+        in_channels: int,
+        out_channels: int,
+        lag_backward: int,
+        lag_forward: int,
+        use_lstm: bool,
+        downsampling: int,
+        hidden_channels: int,
+        filtering_size: int,
+        envelope_size: int,
+        fc_hidden_features: int,
     ):
         super(self.__class__, self).__init__()
+        assert filtering_size % 2 == 1, "conv weights must be odd"
+        assert envelope_size % 2 == 1, "envelope size must be odd"
+        assert hidden_channels % 2 == 0, "hidden channels number must be even"
+        self.downsampling = downsampling
+        self.filtering_size = filtering_size
+        self.envelope_size = envelope_size
+        self.hidden_channels = hidden_channels
+
         window_size = lag_backward + lag_forward + 1
-        self.final_out_features = (
-            window_size // self.DOWNSAMPLING + 1
-        ) * self.HIDDEN_CHANNELS
+        final_out_features = (
+            window_size // self.downsampling + 1
+        ) * self.hidden_channels
         self.use_lstm = use_lstm
 
-        assert window_size > self.FILTERING_SIZE
-        assert window_size > self.ENVELOPE_SIZE
+        assert window_size > filtering_size
+        assert window_size > envelope_size
 
-        self.unmixing_layer = nn.Conv1d(in_channels, self.HIDDEN_CHANNELS, 1)
+        self.unmixing_layer = nn.Conv1d(in_channels, self.hidden_channels, 1)
         self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(
-            self.HIDDEN_CHANNELS, affine=False
+            self.hidden_channels, affine=False
         )
-        self.detector = self._create_envelope_detector(self.HIDDEN_CHANNELS)
+        self.detector = self._create_envelope_detector(self.hidden_channels)
         self.features_batchnorm = torch.nn.BatchNorm1d(
-            self.final_out_features, affine=False
+            final_out_features, affine=False
         )
-        self.lstm = nn.LSTM(
-            self.HIDDEN_CHANNELS,
-            int(self.HIDDEN_CHANNELS / 2),
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
+        if self.use_lstm:
+            self.lstm = nn.LSTM(
+                self.hidden_channels,
+                self.hidden_channels // 2,
+                num_layers=1,
+                batch_first=True,
+                bidirectional=True,
+            )
 
-        self.fc_layer = nn.Sequential(
-            nn.Linear(self.final_out_features, out_channels),
-            #             nn.Linear(self.final_out_features, self.FC_HIDDEN_FEATURES),
+        # self.fc_layer = nn.Sequential(
+        #     nn.Linear(final_out_features, out_channels),
+            #             nn.Linear(final_out_features, fc_hidden_features),
             #             nn.ReLU(),
-            #             nn.Linear(self.FC_HIDDEN_FEATURES, self.FC_HIDDEN_FEATURES),
+            #             nn.Linear(fc_hidden_features, fc_hidden_features),
             #             nn.ReLU(),
-            #             nn.Linear(self.FC_HIDDEN_FEATURES, self.FC_HIDDEN_FEATURES),
+            #             nn.Linear(fc_hidden_features, fc_hidden_features),
             #             nn.ReLU(),
-            #             nn.Linear(self.FC_HIDDEN_FEATURES, out_channels),
-        )
+            #             nn.Linear(fc_hidden_features, out_channels),
+        # )
+        self.fc_layer = nn.Linear(final_out_features, out_channels)
 
     def _create_envelope_detector(self, in_channels):
         # 1. Learn band pass flter
@@ -68,10 +73,10 @@ class SimpleNet(nn.Module):
             nn.Conv1d(
                 in_channels,
                 in_channels,
-                kernel_size=self.FILTERING_SIZE,
+                kernel_size=self.filtering_size,
                 bias=False,
                 groups=in_channels,
-                padding=int(self.FILTERING_SIZE / 2),
+                padding=int(self.filtering_size / 2),
             ),
             nn.BatchNorm1d(in_channels, affine=False),
             nn.LeakyReLU(-1),  # just absolute value
@@ -80,19 +85,27 @@ class SimpleNet(nn.Module):
             nn.Conv1d(
                 in_channels,
                 in_channels,
-                kernel_size=self.ENVELOPE_SIZE,
+                kernel_size=self.envelope_size,
                 groups=in_channels,
-                padding=int(self.ENVELOPE_SIZE / 2),
+                padding=self.envelope_size // 2,
             ),
         )
 
+    def get_conv_filtering_weights(self):
+        conv_params = self.detector[0].cpu().parameters()
+        return np.squeeze(list(conv_params)[0].detach().numpy())
+
+    def get_spatial(self):
+        return self.unmixing_layer.weight.cpu().detach().numpy()[:, :, 0].T
+
+    def get_unmixed_batch(self):
+        return self._unmixed_channels.cpu().detach().numpy()
+
     def forward(self, x):
-        self.unmixed_channels = self.unmixing_layer(x)
-        unmixed_channels_scaled = self.unmixed_channels_batchnorm(
-            self.unmixed_channels
-        )
-        detected_envelopes = self.detector(unmixed_channels_scaled)
-        features = detected_envelopes[:, :, :: self.DOWNSAMPLING].contiguous()
+        self._unmixed_channels = self.unmixing_layer(x)
+        unmix_scaled = self.unmixed_channels_batchnorm(self._unmixed_channels)
+        detected_envelopes = self.detector(unmix_scaled)
+        features = detected_envelopes[:, :, :: self.downsampling].contiguous()
         if self.use_lstm:
             features = self.lstm(features.transpose(1, 2))[0].transpose(1, 2)
         features = features.reshape((features.shape[0], -1))
@@ -226,7 +239,7 @@ class DenseBlock(nn.Module):
                         in_channels,
                         growth_rate,
                         kernel_size=filter_size,
-                        padding=int(filter_size / 2),
+                        padding=filter_size // 2,
                     ),
                 )
             )
@@ -273,12 +286,12 @@ class DenseNet(nn.Module):
                 )
             )
 
-        self.final_out_features = 6250  # KOSTYL
+        final_out_features = 6250  # KOSTYL
 
         self.features_batchnorm = torch.nn.BatchNorm1d(
-            self.final_out_features, affine=False
+            final_out_features, affine=False
         )
-        self.fc_layer = nn.Linear(self.final_out_features, out_channels)
+        self.fc_layer = nn.Linear(final_out_features, out_channels)
         self.lstm = nn.LSTM(
             50, int(50 / 2), num_layers=1, batch_first=True, bidirectional=True
         )

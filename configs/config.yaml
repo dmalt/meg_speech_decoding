@@ -1,0 +1,33 @@
+defaults:
+    - dataset: simulated
+    - _self_
+
+lag_backward: 100
+lag_forward: 100
+target_features_cnt: 1  # e.g. n_mels for melspectrogram
+# selected_channels: ${python_range:"range(6, 12)"}
+selected_channels: ${python_range:"range(5)"}
+
+runner:
+    runs_count: 1  # not used
+    debug: False
+    batch_size: 500
+    max_iterations_count: 8000
+    metric_iter: 250
+    early_stop_steps: 10000
+    upd_evry_n_steps: 250
+    train_test_ratio: 0.6
+model:
+    learning_rate: 0.001
+    regression:
+        _target_: library.models_regression.SimpleNet
+        in_channels: ${len:${selected_channels}}
+        out_channels: ${target_features_cnt}
+        lag_backward: ${lag_backward}
+        lag_forward: ${lag_forward}
+        use_lstm: False
+        downsampling: 10
+        hidden_channels: 4  # must be even
+        filtering_size: 101
+        envelope_size: 101
+        fc_hidden_features: 100  # not used

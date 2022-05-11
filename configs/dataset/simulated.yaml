@@ -1,0 +1,11 @@
+defaults:
+    - patient: simulated
+    - _self_
+
+_target_: library.datasets.SimulatedDataset.from_config
+transform:
+    _target_: library.common_preprocessing.Scaler
+target_transformer:
+    _target_: library.common_preprocessing.Scaler
+lag_backward: ${lag_backward}
+lag_forward: ${lag_forward}

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional, Protocol
 
 import librosa as lb  # type: ignore
 import librosa.feature as lbf  # type: ignore
 import numpy as np  # type: ignore
 import scipy  # type: ignore
+import scipy.interpolate as sci  # type: ignore
 import scipy.io  # type: ignore
 import scipy.signal  # type: ignore
 import sklearn  # type: ignore
 import sklearn.preprocessing  # type: ignore
+from joblib import Memory  # type: ignore
+
+memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 
 
 def notch_filtering_simple(ecog, frequency):
@@ -129,7 +134,23 @@ def extract_mfccs(sound, sampling_rate, downsampling_coef, out_length, n_mfcc):
     return mfccs_resampled
 
 
-# Here complex preprocessing function starts
+class MegProcessor:
+    def __call__(self, data):
+        return sklearn.preprocessing.scale(data, copy=True).astype("float32")
+
+
+class Scaler:
+    def __call__(self, data):
+        return self.transform(data)
+
+    def transform(self, data):
+        scaler = sklearn.preprocessing.StandardScaler()
+        return scaler.fit_transform(data).astype("float32")
+
+    def detect_voice(self, y_batch):
+        # return np.sum(y_batch > 1, axis=1) > 5
+        return None
+
 
 @dataclass
 class ClassicEcogPipeline:
@@ -137,8 +158,15 @@ class ClassicEcogPipeline:
     lowpass: float
     highpass: float
     selected_channels: list[int]
+    sampling_rate: int
 
-    def __call__(self, ecog, sr):
+    def __post_init__(self):
+        self._transform = memory.cache(self._transform)
+
+    def __call__(self, ecog):
+        return self._transform(ecog, self.sampling_rate)
+
+    def _transform(self, ecog, sr):
         ecog = scipy.signal.decimate(ecog, self.dsamp_coef, axis=0)
         new_sr = int(sr / self.dsamp_coef)
         ecog = remove_eyes_artifacts(ecog, new_sr, self.highpass)
@@ -148,21 +176,33 @@ class ClassicEcogPipeline:
         return ecog.astype("float32")[:, self.selected_channels]
 
 
+class TargetTransformer(Protocol):
+    def transform(self, sound, sr, out_length):
+        pass
+
+    def detect_voice(self, y_batch):
+        pass
+
+
 @dataclass
 class ClassicMelspectrogramPipeline:
     dsamp_coef: int
     n_mels: int
     f_max: float
 
-    def __call__(self, sound, sr, out_length):
+    def __post_init__(self):
+        self.transform = memory.cache(self.transform)
+
+    def transform(self, sound, sr, out_length):
         sound /= np.max(np.abs(sound))
-        m = self.extract_melspectrogram(sound, sr, out_length)
+        m = self._extract_melspectrogram(sound, sr, out_length)
+        del sound
         m = sklearn.preprocessing.scale(m).astype("float32")
         if m.ndim == 1:
             m = m.reshape((-1, 1))
         return m
 
-    def extract_melspectrogram(self, sound, sr, out_length):
+    def _extract_melspectrogram(self, sound, sr, out_length):
         melspec = lbf.melspectrogram(
             y=sound,
             sr=sr,
@@ -177,8 +217,21 @@ class ClassicMelspectrogramPipeline:
         elif logmelspec.shape[0] - 1 == out_length:
             return logmelspec[:-1]
         else:
-            raise ValueError
-        return
+            return self._interpolate_to_out_length(
+                logmelspec, out_length, len(sound)
+            )
+
+    def _interpolate_to_out_length(self, y, out_length, orig_length):
+        x = np.arange(0, orig_length, self.dsamp_coef)
+        itp = sci.interp1d(
+            x, y, bounds_error=False, fill_value="extrapolate", axis=0
+        )
+        sr_ratio = orig_length / out_length
+        meg_samp = (np.arange(out_length) * sr_ratio).astype(int)
+        return itp(meg_samp)
+
+    def detect_voice(self, y_batch):
+        return np.sum(y_batch > 1, axis=1) > int(self.n_mels * 0.25)
 
 
 def classic_lpc_pipeline(
@@ -200,3 +253,40 @@ def classic_mfcc_pipeline(
     )
     mfccs = sklearn.preprocessing.scale(mfccs)
     return mfccs
+
+
+def get_amplitude_spectrum(
+    signal: np.ndarray, sr: float, n: Optional[int] = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Compute amplitude spectrum for a signal array along the last axis
+
+    Parameters
+    ----------
+    signal: array of shape(..., n_samples)
+        Target signal
+    sr: float
+        Sampling rate
+    n: int, optional
+        Signal length in samples; if doesn't equal len(signal), the signal is
+        cropped or padded to match n (see numpy.fft.fft)
+
+    Returns
+    -------
+    freqs: array
+        1D array of frequencies
+    amp_spce: array
+        Amplitude spectrum
+
+    See also
+    --------
+    numpy.fft.fft
+    numpy.fft.fftfreq
+
+    """
+    apm_spec = np.abs(np.fft.fft(signal, n))
+    n = signal.shape[-1] if n is None else n
+    freqs = np.fft.fftfreq(n, 1 / sr)
+    end = len(freqs) // 2
+    assert n // 2 == end, f"{n=}, {end=}, {signal.shape=}, {freqs=}"
+    return freqs[:end], apm_spec[..., :end]

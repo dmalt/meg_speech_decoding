@@ -1,0 +1,5 @@
+# @package _global_
+defaults:
+    - override /dataset: simulated
+selected_channels: ${python_range:"range(5)"}
+target_features_cnt: 1

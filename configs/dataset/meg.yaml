@@ -1,0 +1,14 @@
+defaults:
+    - patient: meg_clean
+    - _self_
+
+_target_: library.datasets.MegDataset.from_config
+transform:
+    _target_: library.common_preprocessing.MegProcessor
+target_transformer:
+    _target_: library.common_preprocessing.ClassicMelspectrogramPipeline
+    dsamp_coef: 22
+    n_mels: ${target_features_cnt}
+    f_max: 2000
+lag_backward: ${lag_backward}
+lag_forward: ${lag_forward}
