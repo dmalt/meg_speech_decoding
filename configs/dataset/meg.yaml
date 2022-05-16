@@ -5,7 +5,11 @@ defaults:
 _target_: library.datasets.MegDataset.from_config
 transform:
     _target_: library.common_preprocessing.MegProcessor
-target_transformer:
+    highpass: 10
+    lowpass: 120
+    notch_freqs: [50, 100]
+    selected_channels: ${selected_channels}
+target_transform:
     _target_: library.common_preprocessing.ClassicMelspectrogramPipeline
     dsamp_coef: 22
     n_mels: ${target_features_cnt}

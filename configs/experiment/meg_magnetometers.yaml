@@ -1,7 +1,7 @@
 # @package _global_
 defaults:
     - override /dataset: meg
-selected_channels: ${python_range:"range(306)"}
+selected_channels: ${python_range:"range(2, 306, 3)"}
 target_features_cnt: 20
 lag_backward: 1000
 lag_forward: 0

@@ -27,6 +27,7 @@ def corr_multiple(x, y):
 
 def train_batch(bench_model, x_batch, y_batch):
     bench_model.model.train()
+    # loss_function = nn.MSELoss()
     loss_function = nn.MSELoss()
     bench_model.optimizer.zero_grad()
     y_predicted = bench_model.model(x_batch)

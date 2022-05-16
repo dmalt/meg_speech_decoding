@@ -1,4 +1,8 @@
+from __future__ import annotations
+
 import logging
+from dataclasses import dataclass
+from typing import Any, Callable, Optional
 
 import h5py  # type: ignore
 import hydra  # type: ignore  # noqa
@@ -8,43 +12,43 @@ import numpy as np  # type: ignore
 import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset  # type: ignore
 
-from .common_preprocessing import TargetTransformer
+from .common_preprocessing import (SignalAndSrate, TargetTransformer,
+                                   align_samples)
 
 log = logging.getLogger(__name__)
 
 
-class TimeseriesDataset(Dataset):
+@dataclass
+class SpeechDataset(Dataset):
+    X: np.ndarray
+    Y: np.ndarray
+    lag_backward: int
+    lag_forward: int
+    detect_voice: Callable[[np.ndarray], Optional[np.ndarray]]
+    info: dict
+
+    def __post_init__(self):
+        self._n_samp = self.X.shape[0]
+
     @classmethod
     def from_config(
-        cls, patient, lag_backward, lag_forward, transform, target_transformer
-    ):
-        raise NotImplementedError
-
-    def __init__(
-        self,
-        X,
-        Y,
+        cls,
+        patient: Any,
         lag_backward: int,
         lag_forward: int,
-        target_transformer: TargetTransformer,
-        info: dict,
+        transform: Callable[[np.ndarray, float], SignalAndSrate],
+        target_transform: TargetTransformer,
     ):
-        self.X = X
-        self._n_samp = self.X.shape[0]
-        self.Y = Y
-        self.lag_backward = lag_backward
-        self.lag_forward = lag_forward
-        self.target_transformer = target_transformer
-        self.info = info
+        raise NotImplementedError
 
     def train_test_split(self, ratio: float):
         train_size = int(self._n_samp * ratio)
         X_train, Y_train = self.X[:train_size], self.Y[:train_size]
         X_test, Y_test = self.X[train_size:], self.Y[train_size:]
         lb, lf = self.lag_backward, self.lag_forward
-        tf, info = self.target_transformer, self.info
-        dataset_train = self.__class__(X_train, Y_train, lb, lf, tf, info)
-        dataset_test = self.__class__(X_test, Y_test, lb, lf, tf, info)
+        dv, info = self.detect_voice, self.info
+        dataset_train = self.__class__(X_train, Y_train, lb, lf, dv, info)
+        dataset_test = self.__class__(X_test, Y_test, lb, lf, dv, info)
         return dataset_train, dataset_test
 
     def __len__(self):
@@ -56,60 +60,72 @@ class TimeseriesDataset(Dataset):
         return X, Y
 
 
-class SpeechDataset(TimeseriesDataset):
-    def detect_voice(self, y_batch):
-        return self.target_transformer.detect_voice(y_batch)
+@dataclass
+class EcogPatientConfig:
+    sampling_rate: float
+    files_list: list[str]
+    ecog_channels: list[int]
+    sound_channel: int
 
 
 class EcogDataset(SpeechDataset):
     @classmethod
     def from_config(
-        cls, patient, lag_backward, lag_forward, transform, target_transformer
+        cls,
+        patient: EcogPatientConfig,
+        lag_backward: int,
+        lag_forward: int,
+        transform: Callable[[np.ndarray, float], SignalAndSrate],
+        target_transform: TargetTransformer,
     ):
         X, Y = [], []
         sr = patient.sampling_rate
-        for filepath in patient.files_list:
-            data = cls._read_h5_file(filepath)
-            ecog = data[:, patient.ecog_channels].astype("double")
-            sound = data[:, patient.sound_channel].astype("double")
-            x = transform(ecog)
-            y = target_transformer.transform(sound, sr, x.shape[0])
+        for f in patient.files_list:
+            ecog, sound = read_ecog(f, patient.ecog_channels, patient.sound_channel)
+            x, new_sr = transform(ecog, sr)
+            y, new_sr_sound = target_transform(sound, sr)
+            y = align_samples(y, new_sr_sound, x, new_sr)
             X.append(x)
             Y.append(y)
 
         X = np.concatenate(X, axis=0)
         Y = np.concatenate(Y, axis=0)
-        info = {"sampling_rate": transform.sampling_rate}
-        return cls(X, Y, lag_backward, lag_forward, target_transformer, info)
+        info = {"sampling_rate": new_sr}
+        return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)
 
-    @staticmethod
-    def _read_h5_file(filepath):
-        with h5py.File(filepath, "r+") as input_file:
-            return input_file["RawData"]["Samples"][()]
+
+def read_ecog(fpath: str, ecog_chs: list[int], sound_ch: int) -> tuple[np.ndarray, np.ndarray]:
+    with h5py.File(fpath, "r+") as input_file:
+        data = input_file["RawData"]["Samples"][()]
+    ecog = data[:, ecog_chs].astype("double")
+    sound = data[:, sound_ch].astype("double")
+    return ecog, sound
 
 
 class MegDataset(SpeechDataset):
     @classmethod
     def from_config(
-        cls, patient, transform, target_transformer, lag_backward, lag_forward
+        cls,
+        patient,
+        lag_backward: int,
+        lag_forward: int,
+        transform: Callable[[np.ndarray, float], SignalAndSrate],
+        target_transform: TargetTransformer,
     ):
-        raw = mne.io.read_raw_fif(
-            patient.raw_path, verbose="ERROR", preload=True
-        )
+        raw = mne.io.read_raw_fif(patient.raw_path, verbose="ERROR", preload=True)
         raw.pick_types(meg=True)
-        raw.notch_filter(freqs=(50, 100, 150))
-        raw.filter(l_freq=10, h_freq=120)
         log.debug(raw.info)
-        X = raw.get_data(reject_by_annotation="omit").T
-        info = {"mne_info": raw.info, "sampling_rate": raw.info["sfreq"]}
+        X, sr = raw.get_data(reject_by_annotation="omit").T, raw.info["sfreq"]
         log.info(f"Data length={len(X) / raw.info['sfreq']} sec")
+        info = {"mne_info": raw.info}
         del raw
-        X = transform(X)
-        n_samp = len(X)
+        X, new_sr = transform(X, sr)
+        info["sampling_rate"] = new_sr
         sound, sound_sr = lb.load(patient.audio_align_path, sr=None)
         log.info(f"Sound length={len(sound) / sound_sr:.2f} sec, {sound_sr=}")
-        Y = target_transformer.transform(sound, sound_sr, n_samp)
-        return cls(X, Y, lag_backward, lag_forward, target_transformer, info)
+        Y, new_sound_sr = target_transform(sound, sound_sr)
+        Y = align_samples(Y, new_sound_sr, X, new_sr)
+        return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)
 
 
 class SimulatedDataset(SpeechDataset):
@@ -136,7 +152,7 @@ class SimulatedDataset(SpeechDataset):
         cls,
         patient,
         transform,
-        target_transformer,
+        target_transform,
         lag_backward,
         lag_forward,
     ):
@@ -159,18 +175,16 @@ class SimulatedDataset(SpeechDataset):
         assert np.linalg.matrix_rank(X) == n_sen
 
         log.debug(f"{X.shape=}, {Y.shape=}")
-        X, Y = transform(X), target_transformer.transform(Y)
+        (X, new_sr), (Y, _) = transform(X, sr), target_transform(Y, sr)
         info = {
             "mixing_matrix": mix_matr,
-            "sampling_rate": sr,
+            "sampling_rate": new_sr,
             "target_lag": lag,
         }
-        return cls(X, Y, lag_backward, lag_forward, target_transformer, info)
+        return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)
 
     @classmethod
-    def gen_signal(
-        cls, sig_len: int, src_dim: int, sen_dim: int, target_lag: int
-    ):
+    def gen_signal(cls, sig_len: int, src_dim: int, sen_dim: int, target_lag: int):
         signals = np.random.normal(0, 1, (sig_len, src_dim))
         assert len(cls.filters) == src_dim
         filtered_signals = cls.filter_signals(signals, cls.filters)
@@ -195,12 +209,8 @@ class SimulatedDataset(SpeechDataset):
         noisy_signals = powerlaw_psd_gaussian(cls.BETA, sig_len * noise_dim)
         noisy_signals = noisy_signals.reshape((sig_len, noise_dim))
 
-        assert (
-            len(cls.noisy_filters) == noise_dim
-        ), f"{len(cls.noisy_filters)} != {noise_dim}"
-        filt_noisy_signals = cls.filter_signals(
-            noisy_signals, cls.noisy_filters
-        )
+        assert len(cls.noisy_filters) == noise_dim, f"{len(cls.noisy_filters)} != {noise_dim}"
+        filt_noisy_signals = cls.filter_signals(noisy_signals, cls.noisy_filters)
         noise_mixing_matrix = np.random.uniform(0, 1, (noise_dim, sen_dim))
         return np.matmul(filt_noisy_signals, noise_mixing_matrix)
 
@@ -213,9 +223,7 @@ class SimulatedDataset(SpeechDataset):
             if single_filter is None:
                 filtered_signals[:, index] = signals[:, index]
                 continue
-            filtered_signals[:, index] = np.convolve(
-                signals[:, index], single_filter, mode="same"
-            )
+            filtered_signals[:, index] = np.convolve(signals[:, index], single_filter, mode="same")
         return filtered_signals
 
     @staticmethod

@@ -10,7 +10,8 @@ from torch.autograd import Variable  # type: ignore
 from torch.utils.data import DataLoader  # type: ignore
 from tqdm import tqdm  # type: ignore
 
-from .common_preprocessing import get_amplitude_spectrum
+# from .common_preprocessing import get_amplitude_spectrum
+from .signal_processing import SpectralFeatures
 
 
 class ModelInterpreter:
@@ -73,7 +74,7 @@ class ModelInterpreter:
         spec_patterns = []
         for i_u, i_f in product(range(unmixed_ch_cnt), range(filt_per_ch)):
             w = conv_weights[i_u * filt_per_ch + i_f, :]
-            freqs, sw = get_amplitude_spectrum(w, sr, nperseg)
+            freqs, sw = SpectralFeatures(w, sr).asd(nperseg)
             sw = skp.minmax_scale(sw)
             x = X[:, i_u]
             _, x_psd = scs.welch(x, sr, nperseg=nperseg, detrend="linear")

@@ -14,9 +14,7 @@ from library.runner_regression import run_regression
 log = logging.getLogger(__name__)
 
 OmegaConf.register_new_resolver("len", lambda x: len(x))
-OmegaConf.register_new_resolver(
-    "python_range", lambda x: ListConfig(list(eval(x)))
-)
+OmegaConf.register_new_resolver("python_range", lambda x: ListConfig(list(eval(x))))
 
 
 def set_debug_level():
@@ -40,8 +38,9 @@ def run_tensorboard(logdir):
 
 @hydra.main(config_path="./configs", config_name="config")
 def main(cfg):
-    if cfg.runner.debug:
+    if cfg.run_tensorboard:
         run_tensorboard("runs")
+    if cfg.runner.debug:
         set_debug_level()
         OmegaConf.resolve(cfg)
         log.debug(OmegaConf.to_yaml(cfg))

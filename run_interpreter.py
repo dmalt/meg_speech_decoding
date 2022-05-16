@@ -12,10 +12,10 @@ from library.visualize import (InterpretPlotLayout, TopoVisualizer,
 
 # MODEL_DATE = "2022-05-09"
 # MODEL_TIME = "13-47-04"
-MODEL_DATE = "2022-05-10"
+MODEL_DATE = "2022-05-16"
 # MODEL_TIME = "18-42-04"
-MODEL_TIME = "23-17-30"
-# MODEL_TIME = "00-08-27"
+# MODEL_TIME = "23-17-30"
+MODEL_TIME = "21-30-49"
 OUTPUTS_DIR = Path(f"./outputs/{MODEL_DATE}/{MODEL_TIME}/")
 CONFIG_PATH = OUTPUTS_DIR / ".hydra"
 MODEL_PATH = OUTPUTS_DIR / "model_dumps/BenchModelRegressionBase.pth"

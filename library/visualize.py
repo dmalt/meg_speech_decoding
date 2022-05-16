@@ -32,7 +32,6 @@ class TopoVisualizer:
         print(type(ax))
 
         if len(tt) == 306:
-            print('here')
             meg_idx = mne.pick_types(self.info, meg="mag")
             info = mne.pick_info(self.info, sel=meg_idx)
             tt = (tt[::3] + tt[1::3] + tt[2::3]) / 3
