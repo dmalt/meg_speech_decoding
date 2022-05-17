@@ -103,7 +103,7 @@ class ModelInterpreter:
             patterns.append(np.cov(X_filt.T) @ SW[:, i_comp])
         return patterns
 
-    def get_naive(self) -> np.ndarray:
+    def get_naive(self) -> list[np.ndarray]:
         spatial_weights = self.get_spatial_weigts()
         return list((np.cov(self.dataset.X.T) @ spatial_weights).T)
         # return list(spatial_weights.T @ np.cov(self.dataset.X.T))

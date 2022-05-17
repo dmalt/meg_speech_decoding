@@ -1,5 +1,5 @@
-name: meg_clean
-files_dir: "/home/altukhov/Data/speech/rawdata/derivatives/"
-raw_path: "${.files_dir}/05-apply_ica/sub-01/sub-01_task-speech_proc-icaclean_meg.fif"
-audio_align_path: "${.files_dir}/06-align_speech/sub-01_proc-align_beh.wav"
+defaults:
+    - meg_patient_config
+raw_path: "${meg_data_dir}/05-apply_ica/sub-01/sub-01_task-speech_proc-icaclean_meg.fif"
+audio_align_path: "${meg_data_dir}/06-align_speech/sub-01_proc-align_beh.wav"
 

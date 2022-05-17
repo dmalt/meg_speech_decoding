@@ -93,7 +93,6 @@ def run_regression(bench_model, dataset: SpeechDataset, cfg):
 
     for i in trange(max_steps):
         x_train, y_train = next(train_generator)
-        log.debug(f"{x_train.shape=}, {y_train.shape=}")
         y_predicted, loss = train_batch(bench_model, x_train, y_train)
         speech_idx = dataset.detect_voice(y_train.detach().numpy())
         update_metrics(

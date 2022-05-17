@@ -5,22 +5,28 @@ import torch  # type: ignore
 from hydra import compose, initialize  # type: ignore
 from hydra.utils import instantiate  # type: ignore
 
-import omegaconf_setup  # type: ignore # noqa
+import setup_utils  # type: ignore # noqa
 from library.interpreter import ModelInterpreter
-from library.visualize import (InterpretPlotLayout, TopoVisualizer,
-                               plot_spatial_as_line, plot_temporal_as_line)
+from library.visualize import (
+    InterpretPlotLayout,
+    TopoVisualizer,
+    plot_spatial_as_line,
+    plot_temporal_as_line,
+)
+
+setup_utils.setup_hydra()
 
 # MODEL_DATE = "2022-05-09"
 # MODEL_TIME = "13-47-04"
-MODEL_DATE = "2022-05-16"
+MODEL_DATE = "2022-05-17"
 # MODEL_TIME = "18-42-04"
 # MODEL_TIME = "23-17-30"
-MODEL_TIME = "21-30-49"
+MODEL_TIME = "23-20-35"
 OUTPUTS_DIR = Path(f"./outputs/{MODEL_DATE}/{MODEL_TIME}/")
 CONFIG_PATH = OUTPUTS_DIR / ".hydra"
 MODEL_PATH = OUTPUTS_DIR / "model_dumps/BenchModelRegressionBase.pth"
 
-initialize(config_path=CONFIG_PATH, job_name="interpreter")
+initialize(config_path=str(CONFIG_PATH), job_name="interpreter")
 cfg = compose(config_name="config")
 
 model = instantiate(cfg.model.regression)

@@ -1,6 +1,6 @@
 import numpy as np  # type: ignore
 import torch  # type: ignore
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
 
 from . import common_preprocessing
 from .loggers import LearningLogStorer

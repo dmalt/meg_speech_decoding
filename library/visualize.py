@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt  # type: ignore
-import mne
+import mne  # type: ignore
 import numpy as np  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
