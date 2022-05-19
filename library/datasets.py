@@ -8,10 +8,10 @@ import numpy as np
 import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
-from .common_preprocessing import TargetTransformer
 from .config_schema import EcogPatientConfig, MegPatientConfig
 from .io import read_audio, read_ecog, read_meg
 from .signal_processing import align_samples
+from .transformers import TargetTransformer
 from .type_aliases import Array, Array32
 
 log = logging.getLogger(__name__)

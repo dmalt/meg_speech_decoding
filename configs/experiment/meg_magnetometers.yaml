@@ -2,7 +2,7 @@
 defaults:
     - override /dataset: meg
     # - override /dataset/patient: meg_muscle
-selected_channels: ${python_range:"range(2, 306, 3)"}
+s17-42-32elected_channels: ${python_range:"range(2, 306, 3)"}
 target_features_cnt: 20
 lag_backward: 500
 lag_forward: 0

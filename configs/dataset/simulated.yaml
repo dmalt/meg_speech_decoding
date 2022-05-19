@@ -4,8 +4,8 @@ defaults:
 
 _target_: library.datasets.SimulatedDataset.from_config
 transform:
-    _target_: library.common_preprocessing.Scaler
+    _target_: library.transformers.Scaler
 target_transform:
-    _target_: library.common_preprocessing.Scaler
+    _target_: library.transformers.Scaler
 lag_backward: ${lag_backward}
 lag_forward: ${lag_forward}
