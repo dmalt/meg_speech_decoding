@@ -16,7 +16,7 @@ runner:
     batch_size: 500
     max_iterations_count: 8000
     metric_iter: 250
-    early_stop_steps: 10000
+    early_stop_steps: 20000
     upd_evry_n_steps: 250
     train_test_ratio: 0.6
 model:

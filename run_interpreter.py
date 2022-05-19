@@ -18,10 +18,10 @@ setup_utils.setup_hydra()
 
 # MODEL_DATE = "2022-05-09"
 # MODEL_TIME = "13-47-04"
-MODEL_DATE = "2022-05-17"
+MODEL_DATE = "2022-05-18"
 # MODEL_TIME = "18-42-04"
 # MODEL_TIME = "23-17-30"
-MODEL_TIME = "23-20-35"
+MODEL_TIME = "18-07-07"
 OUTPUTS_DIR = Path(f"./outputs/{MODEL_DATE}/{MODEL_TIME}/")
 CONFIG_PATH = OUTPUTS_DIR / ".hydra"
 MODEL_PATH = OUTPUTS_DIR / "model_dumps/BenchModelRegressionBase.pth"

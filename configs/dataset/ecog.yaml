@@ -4,7 +4,7 @@ defaults:
 
 _target_: library.datasets.EcogDataset.from_config
 transform:
-    _target_: library.common_preprocessing.ClassicEcogPipeline
+    _target_: library.common_preprocessing.EcogPipeline
     dsamp_coef: 19
     lowpass: 200  # remove target leakage
     highpass: 10  # remove EoG artifacts
@@ -12,7 +12,7 @@ transform:
     notch_wide_freqs: ${..patient.notch_wide_freqs}
     selected_channels: ${selected_channels}
 target_transform:
-    _target_: library.common_preprocessing.ClassicMelspectrogramPipeline
+    _target_: library.common_preprocessing.MelspectrogramPipeline
     dsamp_coef: ${..transform.dsamp_coef}
     n_mels: ${target_features_cnt}
     f_max: 2000

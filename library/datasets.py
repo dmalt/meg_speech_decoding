@@ -8,9 +8,10 @@ import numpy as np
 import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
-from .common_preprocessing import TargetTransformer, align_samples
+from .common_preprocessing import TargetTransformer
 from .config_schema import EcogPatientConfig, MegPatientConfig
 from .io import read_audio, read_ecog, read_meg
+from .signal_processing import align_samples
 from .type_aliases import Array, Array32
 
 log = logging.getLogger(__name__)
@@ -124,11 +125,10 @@ class MegDataset(SpeechDataset):
         info = {"mne_info": mne_info, "sampling_rate": new_sr}
 
         Y, Y_sr = read_audio(patient.audio_align_path)
-        Y, new_sound_sr = target_transform(Y, Y_sr)
+        log.debug(f"{Y.dtype=}")
+        Y, new_sound_sr = target_transform(Y, Y_sr)  # , len(X))
         log.debug("Finished transforming target")
         Y = align_samples(Y, new_sound_sr, X, new_sr)
-        import sklearn.preprocessing as skp
-        Y = skp.scale(Y)
         assert len(X) == len(Y), f"{len(X)=} != {len(Y)=}"
 
         return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)

@@ -36,6 +36,10 @@ class TopoVisualizer:
             info = mne.pick_info(self.info, sel=meg_idx)
             tt = (tt[::3] + tt[1::3] + tt[2::3]) / 3
             mne.viz.plot_topomap(tt, info, axes=ax, show=False)
+        elif len(tt) == 102:
+            meg_idx = mne.pick_types(self.info, meg="mag")
+            info = mne.pick_info(self.info, sel=meg_idx)
+            mne.viz.plot_topomap(tt, info, axes=ax, show=False)
 
 
 class InterpretPlotLayout:
