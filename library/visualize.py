@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import matplotlib.pyplot as plt  # type: ignore
 import mne  # type: ignore
 import numpy as np  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
+
+from .datasets import SpeechDataset
 
 PLOT_CFG = dict(
     weights=dict(color="k", marker="."),
@@ -76,9 +80,7 @@ class InterpretPlotLayout:
         self.ax[0, 1].set_title(self.SPATIAL_TITLE)
         plt.rc("font", family="serif", size=10)
 
-    def add_temporal(
-        self, f: np.ndarray, signals: list[np.ndarray], style: str
-    ) -> None:
+    def add_temporal(self, f: np.ndarray, signals: list[np.ndarray], style: str) -> None:
         for i, y in enumerate(signals):
             self.plot_temporal_single(
                 self.ax[i, 0], f[: self.FREQ_XLIM], y[: self.FREQ_XLIM], style
@@ -98,3 +100,24 @@ class InterpretPlotLayout:
             self.ax[i, 0].grid()
         self.ax[0, 0].legend(**self.LEGEND_CFG)
         # self.ax[0, 1].legend(**self.LEGEND_CFG)
+
+
+class DatasetPlotter:
+    def __init__(self, dataset: SpeechDataset):
+        sr = dataset.info["sampling_rate"]
+        n_channels, n_features = dataset.X.shape[1], dataset.Y.shape[1]
+        self.ch_inds = list(range(n_channels))
+        self.feat_inds = list(range(n_channels, n_channels + n_features))
+        ch_names_data = [f"channel {i + 1}" for i in range(n_channels)]
+        ch_names_features = [f"feature {j + 1}" for j in range(n_features)]
+        ch_names = ch_names_data + ch_names_features
+        info = mne.create_info(sfreq=sr, ch_names=ch_names)
+        data = np.concatenate((dataset.X.T, dataset.Y.T), axis=0)
+        self.raw = mne.io.RawArray(data, info)
+
+    def plot(self, highpass: Optional[float] = None, lowpass: Optional[float] = None) -> None:
+        if highpass or lowpass:
+            raw = self.raw.copy().filter(l_freq=highpass, h_freq=lowpass, picks=self.ch_inds)
+        else:
+            raw = self.raw
+        raw.plot(block=True, highpass=highpass, lowpass=lowpass)

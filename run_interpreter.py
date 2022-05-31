@@ -8,6 +8,7 @@ from hydra.utils import instantiate  # type: ignore
 import setup_utils  # type: ignore # noqa
 from library.interpreter import ModelInterpreter
 from library.visualize import (
+    DatasetPlotter,
     InterpretPlotLayout,
     TopoVisualizer,
     plot_spatial_as_line,
@@ -18,10 +19,10 @@ setup_utils.setup_hydra()
 
 # MODEL_DATE = "2022-05-09"
 # MODEL_TIME = "13-47-04"
-MODEL_DATE = "2022-05-18"
+MODEL_DATE = "2022-05-19"
 # MODEL_TIME = "18-42-04"
 # MODEL_TIME = "23-17-30"
-MODEL_TIME = "18-07-07"
+MODEL_TIME = "23-21-29"
 OUTPUTS_DIR = Path(f"./outputs/{MODEL_DATE}/{MODEL_TIME}/")
 CONFIG_PATH = OUTPUTS_DIR / ".hydra"
 MODEL_PATH = OUTPUTS_DIR / "model_dumps/BenchModelRegressionBase.pth"
@@ -32,6 +33,9 @@ cfg = compose(config_name="config")
 model = instantiate(cfg.model.regression)
 model.load_state_dict(torch.load(MODEL_PATH))
 dataset = instantiate(cfg.dataset)
+
+plotter = DatasetPlotter(dataset)
+plotter.plot(highpass=50)
 train, test = dataset.train_test_split(cfg.runner.train_test_ratio)
 mi = ModelInterpreter(model, train, cfg.runner.batch_size)
 f, a, p = mi.get_temporal(nperseg=1000)
