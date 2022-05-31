@@ -8,8 +8,6 @@ target_features_cnt: 1  # e.g. n_mels for melspectrogram
 selected_channels: ${python_range:"range(5)"}
 run_tensorboard: True
 
-meg_data_dir: "/home/altukhov/Data/speech/rawdata/derivatives/"
-
 runner:
     runs_count: 1       # not used
     debug: False
