@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader  # type: ignore
 from tqdm import trange  # type: ignore
 
 from .bench_models_regression import BenchModelRegressionBase
-from .datasets import SpeechDataset
+from .datasets import ContinuousDataset
 from .runner_common import get_random_predictions, infinite
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ def update_metrics(
     return metrics
 
 
-def run_regression(bench_model, dataset: SpeechDataset, cfg):
+def run_regression(bench_model, dataset: ContinuousDataset, cfg):
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))

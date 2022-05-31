@@ -27,68 +27,46 @@ class SimpleNet(nn.Module):
         self.hidden_channels = hidden_channels
 
         window_size = lag_backward + lag_forward + 1
-        final_out_features = (
-            window_size // self.downsampling + 1
-        ) * self.hidden_channels
+        final_out_features = (window_size // self.downsampling + 1) * self.hidden_channels
         self.use_lstm = use_lstm
 
         assert window_size > filtering_size
         assert window_size > envelope_size
 
         self.unmixing_layer = nn.Conv1d(in_channels, self.hidden_channels, 1)
-        self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(
-            self.hidden_channels, affine=False
-        )
+        self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(self.hidden_channels, affine=False)
         self.detector = self._create_envelope_detector(self.hidden_channels)
-        self.features_batchnorm = torch.nn.BatchNorm1d(
-            final_out_features, affine=False
-        )
+        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
         if self.use_lstm:
-            self.lstm = nn.LSTM(
-                self.hidden_channels,
-                self.hidden_channels // 2,
-                num_layers=1,
-                batch_first=True,
-                bidirectional=True,
-            )
+            hc = self.hidden_channels
+            self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
 
         # self.fc_layer = nn.Sequential(
         #     nn.Linear(final_out_features, out_channels),
-            #             nn.Linear(final_out_features, fc_hidden_features),
-            #             nn.ReLU(),
-            #             nn.Linear(fc_hidden_features, fc_hidden_features),
-            #             nn.ReLU(),
-            #             nn.Linear(fc_hidden_features, fc_hidden_features),
-            #             nn.ReLU(),
-            #             nn.Linear(fc_hidden_features, out_channels),
+        #             nn.Linear(final_out_features, fc_hidden_features),
+        #             nn.ReLU(),
+        #             nn.Linear(fc_hidden_features, fc_hidden_features),
+        #             nn.ReLU(),
+        #             nn.Linear(fc_hidden_features, fc_hidden_features),
+        #             nn.ReLU(),
+        #             nn.Linear(fc_hidden_features, out_channels),
         # )
         self.fc_layer = nn.Linear(final_out_features, out_channels)
 
-    def _create_envelope_detector(self, in_channels):
+    def _create_envelope_detector(self, nch: int) -> nn.Sequential:
         # 1. Learn band pass flter
         # 2. Centering signals
         # 3. Abs
         # 4. low pass to get envelope
+        kern_conv, kern_env = self.filtering_size, self.envelope_size
+        pad_conv, pad_env = int(self.filtering_size / 2), int(self.envelope_size / 2)
         return nn.Sequential(
-            nn.Conv1d(
-                in_channels,
-                in_channels,
-                kernel_size=self.filtering_size,
-                bias=False,
-                groups=in_channels,
-                padding=int(self.filtering_size / 2),
-            ),
-            nn.BatchNorm1d(in_channels, affine=False),
+            nn.Conv1d(nch, nch, kernel_size=kern_conv, bias=False, groups=nch, padding=pad_conv),
+            nn.BatchNorm1d(nch, affine=False),
             nn.LeakyReLU(-1),  # just absolute value
             # nn.PReLU(),
             # LogActivation(),
-            nn.Conv1d(
-                in_channels,
-                in_channels,
-                kernel_size=self.envelope_size,
-                groups=in_channels,
-                padding=self.envelope_size // 2,
-            ),
+            nn.Conv1d(nch, nch, kernel_size=kern_env, groups=nch, padding=pad_env),
         )
 
     def get_conv_filtering_weights(self):
@@ -221,9 +199,7 @@ class SimpleNet(nn.Module):
 
 
 class DenseBlock(nn.Module):
-    def __init__(
-        self, in_channels, growth_rate, dense_block_layers, filter_size
-    ):
+    def __init__(self, in_channels, growth_rate, dense_block_layers, filter_size):
         super(DenseBlock, self).__init__()
         self.in_channels = in_channels
         self.dense_block_layers = dense_block_layers
@@ -288,13 +264,9 @@ class DenseNet(nn.Module):
 
         final_out_features = 6250  # KOSTYL
 
-        self.features_batchnorm = torch.nn.BatchNorm1d(
-            final_out_features, affine=False
-        )
+        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
         self.fc_layer = nn.Linear(final_out_features, out_channels)
-        self.lstm = nn.LSTM(
-            50, int(50 / 2), num_layers=1, batch_first=True, bidirectional=True
-        )
+        self.lstm = nn.LSTM(50, int(50 / 2), num_layers=1, batch_first=True, bidirectional=True)
 
     def _create_transition_layer(self, in_channels, out_channels):
         return nn.Sequential(
