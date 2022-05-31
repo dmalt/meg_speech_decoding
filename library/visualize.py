@@ -27,8 +27,12 @@ def plot_spatial_as_line(ax, t, style):
     ax.set_xticks(range(5))
 
 
+class MneInfoWithLayout(mne.Info):
+    pass
+
+
 class TopoVisualizer:
-    def __init__(self, info):
+    def __init__(self, info: MneInfoWithLayout):
         self.info = info
 
     def __call__(self, ax, t, style=None):
@@ -104,14 +108,13 @@ class InterpretPlotLayout:
 
 class ContinuousDatasetPlotter:
     def __init__(self, dataset: ContinuousDataset):
-        sr = dataset.info["sampling_rate"]
         n_channels, n_features = dataset.X.shape[1], dataset.Y.shape[1]
         self.ch_inds = list(range(n_channels))
         self.feat_inds = list(range(n_channels, n_channels + n_features))
         ch_names_data = [f"channel {i + 1}" for i in range(n_channels)]
         ch_names_features = [f"feature {j + 1}" for j in range(n_features)]
         ch_names = ch_names_data + ch_names_features
-        info = mne.create_info(sfreq=sr, ch_names=ch_names)
+        info = mne.create_info(sfreq=dataset.sampling_rate, ch_names=ch_names)
         data = np.concatenate((dataset.X.T, dataset.Y.T), axis=0)
         self.raw = mne.io.RawArray(data, info)
 

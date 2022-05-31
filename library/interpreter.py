@@ -1,33 +1,34 @@
 from __future__ import annotations
 
 from itertools import product
+from typing import cast
 
-import numpy as np  # type: ignore
+import numpy as np
 import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
-import torch  # type: ignore
-from torch.autograd import Variable  # type: ignore
-from torch.utils.data import DataLoader  # type: ignore
+import torch
+from torch.autograd import Variable
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm  # type: ignore
 
+from .datasets import InterpretableDataset
 from .signal_processing import SpectralFeatures
+from .type_aliases import Array
 
 
 class ModelInterpreter:
-    def __init__(self, model, dataset, batch_size):
+    def __init__(self, model, dataset: InterpretableDataset, batch_size: int):
         self.model = model
-        self.dataset = dataset
+        self.dataset = cast(Dataset, dataset)
         self.batch_size = batch_size
 
-    def get_x_unmixed(self) -> np.ndarray:
+    def get_x_unmixed(self) -> Array:
         X_unmixed = []
-        data_loader = DataLoader(
-            self.dataset, batch_size=self.batch_size, shuffle=False
-        )
+        data_loader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
         i = 0
         for x_batch, _ in tqdm(data_loader):
             i += 1
-            if i >= 3000:
+            if i >= 3000:  # TODO: remove this hack
                 break
             self.model.eval()
             x_batch = Variable(torch.FloatTensor(x_batch))
@@ -39,7 +40,7 @@ class ModelInterpreter:
             X_unmixed.append(self.model.get_unmixed_batch()[:, :, -1])
         return np.concatenate(X_unmixed, axis=0)
 
-    def get_temporal(self, nperseg: int) -> tuple[np.ndarray, list, list]:
+    def get_temporal(self, nperseg: int) -> tuple[Array, list[Array], list[Array]]:
         """
         Get temporal filter weights in frequency domain
 
@@ -62,7 +63,7 @@ class ModelInterpreter:
         scipy.signal.welch
 
         """
-        X, sr = self.get_x_unmixed(), self.dataset.info["sampling_rate"]
+        X, sr = self.get_x_unmixed(), self.dataset.sampling_rate
 
         unmixed_ch_cnt = X.shape[1]
         conv_weights = self.model.get_conv_filtering_weights()
@@ -83,15 +84,15 @@ class ModelInterpreter:
             spec_patterns.append(skp.minmax_scale(sw * x_psd))
         return freqs, spec_weights, spec_patterns
 
-    def get_spatial_weigts(self) -> np.ndarray:
+    def get_spatial_weigts(self) -> Array:
         spatial_weights = self.model.get_spatial()
         scaler = skp.StandardScaler()
         scaler.fit(self.dataset.X)
         spatial_weights /= scaler.var_[:, np.newaxis]
         return spatial_weights
 
-    def get_spatial_patterns(self) -> list[np.ndarray]:
-        SW = self.get_spatial_weigts()
+    def get_spatial_patterns(self) -> list[Array]:
+        spectral_weights = self.get_spatial_weigts()
         TW = self.model.get_conv_filtering_weights()
         patterns = []
         X_filt = np.zeros_like(self.dataset.X)
@@ -99,10 +100,10 @@ class ModelInterpreter:
             for i_ch in range(self.dataset.X.shape[1]):
                 x = self.dataset.X[:, i_ch]
                 X_filt[:, i_ch] = np.convolve(x, TW[i_comp, :], mode="same")
-            patterns.append(np.cov(X_filt.T) @ SW[:, i_comp])
+            patterns.append(np.cov(X_filt.T) @ spectral_weights[:, i_comp])
         return patterns
 
-    def get_naive(self) -> list[np.ndarray]:
+    def get_naive(self) -> list[Array]:
         spatial_weights = self.get_spatial_weigts()
         return list((np.cov(self.dataset.X.T) @ spatial_weights).T)
         # return list(spatial_weights.T @ np.cov(self.dataset.X.T))

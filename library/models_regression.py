@@ -2,6 +2,8 @@ import numpy as np  # type: ignore
 import torch  # type: ignore
 import torch.nn as nn  # type: ignore
 
+from .type_aliases import Array
+
 
 class SimpleNet(nn.Module):
     def __init__(
@@ -69,14 +71,14 @@ class SimpleNet(nn.Module):
             nn.Conv1d(nch, nch, kernel_size=kern_env, groups=nch, padding=pad_env),
         )
 
-    def get_conv_filtering_weights(self):
+    def get_conv_filtering_weights(self) -> Array:
         conv_params = self.detector[0].cpu().parameters()
         return np.squeeze(list(conv_params)[0].detach().numpy())
 
-    def get_spatial(self):
+    def get_spatial(self) -> Array:
         return self.unmixing_layer.weight.cpu().detach().numpy()[:, :, 0].T
 
-    def get_unmixed_batch(self):
+    def get_unmixed_batch(self) -> Array:
         return self._unmixed_channels.cpu().detach().numpy()
 
     def forward(self, x):
