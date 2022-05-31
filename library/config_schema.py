@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -14,4 +15,5 @@ class EcogPatientConfig:
 @dataclass
 class MegPatientConfig:
     raw_path: str
-    audio_align_path: str
+    audio_path: str
+    annotations_path: Optional[str]

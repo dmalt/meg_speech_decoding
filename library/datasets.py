@@ -9,18 +9,18 @@ import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
 from .config_schema import EcogPatientConfig, MegPatientConfig
-from .io import read_audio, read_ecog, read_meg
+from .io import read_ecog, read_meg, read_meg_chunks  # , read_meg_old
 from .signal_processing import align_samples
 from .transformers import TargetTransformer
 from .type_aliases import Array, Array32
 
 log = logging.getLogger(__name__)
 
-TDataset = TypeVar("TDataset", bound="SpeechDataset")
+TDataset = TypeVar("TDataset", bound="ContinuousDataset")
 
 
 @dataclass
-class SpeechDataset(Dataset):
+class ContinuousDataset(Dataset):
     """
     Parameters
     ----------
@@ -75,13 +75,13 @@ class SpeechDataset(Dataset):
     def __len__(self) -> int:
         return self._n_samp - self.lag_backward - self.lag_forward
 
-    def __getitem__(self, i: int) -> tuple[Array, Array]:
+    def __getitem__(self, i: int) -> tuple[Array32, Array32]:
         X = self.X[i : i + self.lag_forward + self.lag_backward + 1].T
         Y = self.Y[i + self.lag_backward]
         return X, Y
 
 
-class EcogDataset(SpeechDataset):
+class EcogDataset(ContinuousDataset):
     @classmethod
     def from_config(
         cls,
@@ -109,7 +109,7 @@ class EcogDataset(SpeechDataset):
         return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)
 
 
-class MegDataset(SpeechDataset):
+class MegDataset(ContinuousDataset):
     @classmethod
     def from_config(
         cls,
@@ -120,11 +120,10 @@ class MegDataset(SpeechDataset):
         target_transform: TargetTransformer,
     ) -> MegDataset:
 
-        X, mne_info = read_meg(patient.raw_path)
+        # X, X_sr, Y, Y_sr, mne_info = read_meg_old(patient)
+        X, X_sr, Y, Y_sr, mne_info = read_meg(patient)
         X, new_sr = transform(X, mne_info["sfreq"])
         info = {"mne_info": mne_info, "sampling_rate": new_sr}
-
-        Y, Y_sr = read_audio(patient.audio_align_path)
         log.debug(f"{Y.dtype=}")
         Y, new_sound_sr = target_transform(Y, Y_sr)  # , len(X))
         log.debug("Finished transforming target")
@@ -134,7 +133,7 @@ class MegDataset(SpeechDataset):
         return cls(X, Y, lag_backward, lag_forward, target_transform.detect_voice, info)
 
 
-class SimulatedDataset(SpeechDataset):
+class SimulatedDataset(ContinuousDataset):
     RANDOM_SEED = 67
     FREQUENCY = 1000
     BETA = 1
@@ -241,3 +240,105 @@ class SimulatedDataset(SpeechDataset):
         for i in range(signals.shape[1]):
             enveloped_signals[:, i] = np.abs(scs.hilbert(signals[:, i]))
         return enveloped_signals
+
+
+@dataclass
+class CompositeDataset(Dataset):
+    datasets: list[ContinuousDataset]
+    detect_voice: Callable
+
+    def __len__(self) -> int:
+        return sum(len(d) for d in self.datasets)
+
+    def __getitem__(self, i: int) -> tuple[Array, Array]:
+        if i > len(self):
+            raise IndexError(f"Index {i} is out of bounds for dataset of size {len(self)}")
+        for d in self.datasets:
+            if i // len(d):
+                i -= len(d)
+            else:
+                break
+        return d[i]
+
+    def train_test_split(self, ratio: float) -> tuple[CompositeDataset, CompositeDataset]:
+        datasets_train, datasets_test = [], []
+        cumlen = 0.0
+        for d in self.datasets:
+            thislen = len(d) / len(self)
+            if cumlen + thislen < ratio:
+                datasets_train.append(d)
+                cumlen += thislen
+            else:
+                datasets_test.append(d)
+        train = self.__class__(datasets_train, self.datasets[0].detect_voice)
+        test = self.__class__(datasets_test, self.datasets[0].detect_voice)
+        log.debug(f"{len(train)=}, {len(test)=}")
+        return train, test
+
+
+class MegChunksDataset(CompositeDataset):
+    @classmethod
+    def from_config(
+        cls,
+        patient: MegPatientConfig,
+        lag_backward: int,
+        lag_forward: int,
+        transform: Callable[[Array, float], tuple[Array32, float]],
+        target_transform: TargetTransformer,
+    ):
+        X, X_sr, Y, Y_sr, mne_info, annotations = read_meg_chunks(patient)
+        log.debug(f"{len(X) / X_sr=:.2f}, {len(Y) / Y_sr=:.2f}")
+        X, new_sr = transform(X, mne_info["sfreq"])
+        info = {"mne_info": mne_info, "sampling_rate": new_sr}
+        log.debug(f"{Y.dtype=}")
+        Y, new_sound_sr = target_transform(Y, Y_sr)  # , len(X))
+        log.debug("Finished transforming target")
+        Y = align_samples(Y, new_sound_sr, X, new_sr)
+        datasets = []
+        for s in get_good_slices(new_sr, annotations):
+            log.debug(f"{s=}")
+            X_slice, Y_slice = X[s, :], Y[s, :]
+            if len(X_slice) < lag_backward + lag_forward + 1:
+                continue
+            datasets.append(
+                MegDataset(
+                    X_slice,
+                    Y_slice,
+                    lag_backward,
+                    lag_forward,
+                    target_transform.detect_voice,
+                    info,
+                )
+            )
+        res = cls(datasets, datasets[0].detect_voice)  # type: ignore  # TODO: why mypy isn't happy here?
+        log.debug(f"{len(res)=}")
+        return res
+
+
+def get_good_slices(sr: float, annotations: list[tuple[float, float]]) -> list[slice]:
+    """Get slices for periods not annotated as bads"""
+    events = []
+    # when start and end occur simoultaneosly, first add new bad segment, then remove old
+    START = 0
+    END = 1
+    for onset, duration in annotations:
+        events.append((int(onset * sr), START))
+        events.append((int((onset + duration) * sr), END))
+    events.sort()
+    bad_overlap_cnt = 0
+
+    res = []
+    last_start = 0
+    for ev in events:
+        if ev[1] == START:
+            if bad_overlap_cnt == 0:
+                res.append(slice(last_start, ev[0]))
+            bad_overlap_cnt += 1
+        elif ev[1] == END:
+            bad_overlap_cnt -= 1
+            if bad_overlap_cnt == 0:
+                last_start = ev[0]
+    # process last event
+    if bad_overlap_cnt == 0:
+        res.append(slice(last_start, None))
+    return res
