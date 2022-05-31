@@ -1,10 +1,11 @@
 # @package _global_
 defaults:
     - override /dataset: meg
-selected_channels: ${python_range:"range(2, 306, 3)"}
+selected_channels: ${python_range:"range(0, 306, 3)"}
+# selected_channels: ${python_range:"range(306)"}
 target_features_cnt: 20
-lag_backward: 1000
-lag_forward: 0
+lag_backward: 500
+lag_forward: 500
 runner:
     batch_size: 100
     max_iterations_count: 20000
@@ -33,6 +34,7 @@ dataset:
         f_max: 2000
     lag_backward: ${lag_backward}
     lag_forward: ${lag_forward}
-    patient:
-        annotations_path: null
+    # patient:
+        # annotations_path: null
+        # audio_path: "${oc.env:MEG_DATA}/07-align_speech/sub-01_proc-align_beh_bads_removed.wav"
 
