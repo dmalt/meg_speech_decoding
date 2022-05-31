@@ -8,7 +8,7 @@ from hydra.utils import instantiate  # type: ignore
 import setup_utils  # type: ignore # noqa
 from library.interpreter import ModelInterpreter
 from library.visualize import (
-    DatasetPlotter,
+    ContinuousDatasetPlotter,
     InterpretPlotLayout,
     TopoVisualizer,
     plot_spatial_as_line,
@@ -34,7 +34,7 @@ model = instantiate(cfg.model.regression)
 model.load_state_dict(torch.load(MODEL_PATH))
 dataset = instantiate(cfg.dataset)
 
-plotter = DatasetPlotter(dataset)
+plotter = ContinuousDatasetPlotter(dataset)
 plotter.plot(highpass=50)
 train, test = dataset.train_test_split(cfg.runner.train_test_ratio)
 mi = ModelInterpreter(model, train, cfg.runner.batch_size)

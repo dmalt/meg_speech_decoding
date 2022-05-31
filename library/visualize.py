@@ -7,7 +7,7 @@ import mne  # type: ignore
 import numpy as np  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
-from .datasets import SpeechDataset
+from .datasets import ContinuousDataset
 
 PLOT_CFG = dict(
     weights=dict(color="k", marker="."),
@@ -102,8 +102,8 @@ class InterpretPlotLayout:
         # self.ax[0, 1].legend(**self.LEGEND_CFG)
 
 
-class DatasetPlotter:
-    def __init__(self, dataset: SpeechDataset):
+class ContinuousDatasetPlotter:
+    def __init__(self, dataset: ContinuousDataset):
         sr = dataset.info["sampling_rate"]
         n_channels, n_features = dataset.X.shape[1], dataset.Y.shape[1]
         self.ch_inds = list(range(n_channels))
