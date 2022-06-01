@@ -73,7 +73,7 @@ def update_metrics(
     return metrics
 
 
-def run_regression(bench_model, dataset: ContinuousDataset, cfg):
+def run_regression(bench_model, dataset: ContinuousDataset, cfg):  # TODO: change dataset type
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
@@ -127,7 +127,7 @@ def run_regression(bench_model, dataset: ContinuousDataset, cfg):
     generators = {
         "train": train_generator,
         "test": test_generator,
-        "val": val_generator,
+        "val": val_generator,  # TODO: remove val
     }
     model_saver.save_results(save_path, generators, i)
 
@@ -163,7 +163,7 @@ class BestModelSaver:
         log.info(
             f'train correlation={result["train_corr"]:.4f}, '
             + f'test correlation={result["test_corr"]:.4f}, '
-            + f'val correlation={result["val_corr"]=:.4f}'
+            + f'val correlation={result["val_corr"]=:.4f}'  # TODO
         )
         log.info(f"Saving results to {save_path}")
         with open(save_path, "w") as f:
