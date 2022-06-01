@@ -130,6 +130,7 @@ class CompositeDataset(Dataset):
     sampling_rate: float
     datasets: Sequence[ContinuousDataset]
     detect_voice: VoiceDetector
+    info: dict[str, Any]
 
     def __len__(self) -> int:
         return sum(len(d) for d in self.datasets)
@@ -154,8 +155,8 @@ class CompositeDataset(Dataset):
                 cumlen += thislen
             else:
                 datasets_test.append(d)
-        train = self.__class__(self.sampling_rate, datasets_train, self.detect_voice)
-        test = self.__class__(self.sampling_rate, datasets_test, self.detect_voice)
+        train = self.__class__(self.sampling_rate, datasets_train, self.detect_voice, self.info)
+        test = self.__class__(self.sampling_rate, datasets_test, self.detect_voice, self.info)
         log.debug(f"{len(train)=}, {len(test)=}")
         return train, test
 
@@ -196,7 +197,7 @@ class MegChunksDataset(CompositeDataset):
             datasets.append(
                 MegDataset(X_slice, Y_slice, lag_backward, lag_forward, new_sr, dv, info)
             )
-        res = cls(new_sr, datasets, datasets[0].detect_voice)
+        res = cls(new_sr, datasets, datasets[0].detect_voice, info)
         log.debug(f"{len(res)=}")
         return res
 
@@ -336,5 +337,3 @@ class SimulatedDataset(ContinuousDataset):
         for i in range(signals.shape[1]):
             enveloped_signals[:, i] = np.abs(scs.hilbert(signals[:, i]))
         return enveloped_signals
-
-
