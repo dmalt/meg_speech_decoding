@@ -8,10 +8,13 @@ Array32 = npt.NDArray[np.float32]
 
 SignalArray = npt.NDArray[Any]  # array of shape (n_samples, n_sensors)
 SignalArray32 = npt.NDArray[np.float32]  # array of shape (n_samples, n_sensors)
+SignalArrayTransposed32 = npt.NDArray[np.float32]  # array of shape (n_sensors, n_samples)
 
 BatchSignalArray = npt.NDArray[Any]  # array of shape (batch_size, n_samples, n_sensors)
 BatchSignalArray32 = npt.NDArray[np.float32]  # array of shape (batch_size, n_samples, n_sensors)
 BatchSignalArrayMask = npt.NDArray[np.bool_]  # array of shape (n_samples, n_sensors)
+
+TargetArray32 = npt.NDArray[np.float32]  # array of shape (n_sensors,)
 
 VoiceDetector = Callable[[BatchSignalArray], Optional[BatchSignalArrayMask]]
 

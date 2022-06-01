@@ -9,7 +9,7 @@ import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
 from .transformers import TargetTransformer
-from .type_aliases import Array, Array32, SignalArray, SignalArray32
+from .type_aliases import Array, SignalArray, SignalArray32, SignalArrayTransposed32, TargetArray32
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ class Continuous(Dataset):
         raw.info for MEG
 
     """
-    X: Array32
-    Y: Array32
+    X: SignalArray32
+    Y: SignalArray32
     lag_backward: int
     lag_forward: int
     sampling_rate: float
@@ -52,7 +52,7 @@ class Continuous(Dataset):
     def __len__(self) -> int:
         return len(self.X) - self.lag_backward - self.lag_forward
 
-    def __getitem__(self, i: int) -> tuple[SignalArray32, SignalArray32]:
+    def __getitem__(self, i: int) -> tuple[SignalArrayTransposed32, TargetArray32]:
         X = self.X[i : i + self.lag_forward + self.lag_backward + 1].T
         Y = self.Y[i + self.lag_backward]
         return X, Y
@@ -75,7 +75,7 @@ class Composite(Dataset):
     def __len__(self) -> int:
         return sum(len(d) for d in self.datasets)
 
-    def __getitem__(self, i: int) -> tuple[SignalArray32, Array]:
+    def __getitem__(self, i: int) -> tuple[SignalArrayTransposed32, TargetArray32]:
         if i > len(self):
             raise IndexError(f"Index {i} is out of bounds for dataset of size {len(self)}")
         for d in self.datasets:
@@ -101,11 +101,11 @@ class Composite(Dataset):
         return train, test
 
     @property
-    def X(self) -> SignalArray32:  # type: ignore
+    def X(self) -> SignalArray32:
         return np.concatenate([d.X for d in self.datasets], axis=0).astype("float32")
 
     @property
-    def Y(self) -> SignalArray32:  # type: ignore
+    def Y(self) -> SignalArray32:
         return np.concatenate([d.Y for d in self.datasets], axis=0).astype("float32")
 
 
