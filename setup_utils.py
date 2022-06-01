@@ -1,9 +1,8 @@
 import logging
 
+import library.io.speech_meg
 from hydra.core.config_store import ConfigStore  # type: ignore
 from omegaconf import ListConfig, OmegaConf  # type: ignore
-
-from library import datasets
 
 
 def setup_hydra():
@@ -11,7 +10,11 @@ def setup_hydra():
     OmegaConf.register_new_resolver("python_range", lambda x: ListConfig(list(eval(x))))
 
     cs = ConfigStore.instance()
-    cs.store(group="dataset/patient", name="meg_patient_config", node=datasets.MegPatientConfig)
+    cs.store(
+        group="dataset/patient",
+        name="meg_patient_config",
+        node=library.io.speech_meg.PatientConfig,
+    )
 
 
 def set_debug_level():

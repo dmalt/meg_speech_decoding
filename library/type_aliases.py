@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -16,3 +16,5 @@ BatchSignalArrayMask = npt.NDArray[np.bool_]  # array of shape (n_samples, n_sen
 VoiceDetector = Callable[[BatchSignalArray], Optional[BatchSignalArrayMask]]
 
 Transformer = Callable[[SignalArray, float], Tuple[SignalArray32, float]]
+
+Info = Dict[str, Any]

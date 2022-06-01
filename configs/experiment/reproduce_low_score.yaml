@@ -19,7 +19,7 @@ model:
     filtering_size: 25
     envelope_size: 15
 dataset:
-    _target_: library.datasets.MegChunksDataset.from_config
+    _target_: library.io.speech_meg.read_chunks
     # _target_: library.datasets.MegDataset.from_config
     transform:
         _target_: library.transformers.MegPipeline

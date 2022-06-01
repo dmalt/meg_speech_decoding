@@ -2,19 +2,22 @@ defaults:
     - patient: ecog_procenko
     - _self_
 
-_target_: library.datasets.EcogDataset.from_config
-transform:
-    _target_: library.transformers.EcogPipeline
-    dsamp_coef: 19
-    lowpass: 200  # remove target leakage
-    highpass: 10  # remove EoG artifacts
-    notch_narrow_freqs: ${..patient.notch_narrow_freqs}
-    notch_wide_freqs: ${..patient.notch_wide_freqs}
-    selected_channels: ${selected_channels}
-target_transform:
-    _target_: library.transformers.MelspectrogramPipeline
-    dsamp_coef: ${..transform.dsamp_coef}
-    n_mels: ${target_features_cnt}
-    f_max: 2000
-lag_backward: ${lag_backward}
-lag_forward: ${lag_forward}
+_target_: library.io.speech_ecog.read
+lags:
+    backward: ${lag_backward}
+    forward: ${lag_forward}
+t:
+    _target_: library.io.Transformers
+    transform_x:
+        _target_: library.transformers.EcogPipeline
+        dsamp_coef: 19
+        lowpass: 200  # remove target leakage
+        highpass: 10  # remove EoG artifacts
+        notch_narrow_freqs: ${...patient.notch_narrow_freqs}
+        notch_wide_freqs: ${...patient.notch_wide_freqs}
+        selected_channels: ${selected_channels}
+    transform_y:
+        _target_: library.transformers.MelspectrogramPipeline
+        dsamp_coef: ${..transform_x.dsamp_coef}
+        n_mels: ${target_features_cnt}
+        f_max: 2000

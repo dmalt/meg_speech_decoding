@@ -2,21 +2,18 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, Sequence, TypeVar
+from typing import Callable, Protocol, Sequence, TypeVar
 
 import numpy as np
 import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
-from .config_schema import EcogPatientConfig, MegPatientConfig
-from .io import read_ecog, read_meg, read_meg_chunks  # , read_meg_old
-from .signal_processing import align_samples
 from .transformers import TargetTransformer
-from .type_aliases import Array, Array32, SignalArray, SignalArray32, Transformer, VoiceDetector
+from .type_aliases import Array, Array32, SignalArray, SignalArray32
 
 log = logging.getLogger(__name__)
 
-TDataset = TypeVar("TDataset", bound="ContinuousDataset")
+TDataset = TypeVar("TDataset", bound="Continuous")
 
 
 class InterpretableDataset(Protocol):
@@ -25,7 +22,7 @@ class InterpretableDataset(Protocol):
 
 
 @dataclass
-class ContinuousDataset(Dataset):
+class Continuous(Dataset):
     """
     Parameters
     ----------
@@ -51,8 +48,6 @@ class ContinuousDataset(Dataset):
     lag_backward: int
     lag_forward: int
     sampling_rate: float
-    detect_voice: VoiceDetector
-    info: dict[str, Any]
 
     def __len__(self) -> int:
         return len(self.X) - self.lag_backward - self.lag_forward
@@ -67,70 +62,15 @@ class ContinuousDataset(Dataset):
         X_train, Y_train = self.X[:train_size], self.Y[:train_size]
         X_test, Y_test = self.X[train_size:], self.Y[train_size:]
         lb, lf, sr = self.lag_backward, self.lag_forward, self.sampling_rate
-        dv, info = self.detect_voice, self.info
-        dataset_train = self.__class__(X_train, Y_train, lb, lf, sr, dv, info)
-        dataset_test = self.__class__(X_test, Y_test, lb, lf, sr, dv, info)
+        dataset_train = self.__class__(X_train, Y_train, lb, lf, sr)
+        dataset_test = self.__class__(X_test, Y_test, lb, lf, sr)
         return dataset_train, dataset_test
 
 
-class EcogDataset(ContinuousDataset):
-    @classmethod
-    def from_config(
-        cls,
-        patient: EcogPatientConfig,
-        lag_backward: int,
-        lag_forward: int,
-        transform: Transformer,
-        target_transform: TargetTransformer,
-    ) -> EcogDataset:
-        """Alternative constructor to generate EcogDataset instance from hydra configuration"""
-        Xs, Ys = [], []
-        sr = patient.sampling_rate
-        for f in patient.files_list:
-            ecog, sound = read_ecog(f, patient.ecog_channels, patient.sound_channel)
-            x, new_sr = transform(ecog, sr)
-            y, new_sr_sound = target_transform(sound, sr)
-            y = align_samples(y, new_sr_sound, x, new_sr)
-            assert len(x) == len(y)
-            Xs.append(x)
-            Ys.append(y)
-
-        X = np.concatenate(Xs, axis=0)
-        Y = np.concatenate(Ys, axis=0)
-        info: dict[str, Any] = {}
-        return cls(X, Y, lag_backward, lag_forward, new_sr, target_transform.detect_voice, info)
-
-
-class MegDataset(ContinuousDataset):
-    @classmethod
-    def from_config(
-        cls,
-        patient: MegPatientConfig,
-        lag_backward: int,
-        lag_forward: int,
-        transform: Transformer,
-        target_transform: TargetTransformer,
-    ) -> MegDataset:
-
-        # X, X_sr, Y, Y_sr, mne_info = read_meg_old(patient)
-        X, X_sr, Y, Y_sr, mne_info = read_meg(patient)
-        X, new_sr = transform(X, mne_info["sfreq"])
-        info = {"mne_info": mne_info}
-        log.debug(f"{Y.dtype=}")
-        Y, new_sound_sr = target_transform(Y, Y_sr)  # , len(X))
-        log.debug("Finished transforming target")
-        Y = align_samples(Y, new_sound_sr, X, new_sr)
-        assert len(X) == len(Y), f"{len(X)=} != {len(Y)=}"
-
-        return cls(X, Y, lag_backward, lag_forward, new_sr, target_transform.detect_voice, info)
-
-
 @dataclass
-class CompositeDataset(Dataset):
+class Composite(Dataset):
     sampling_rate: float
-    datasets: Sequence[ContinuousDataset]
-    detect_voice: VoiceDetector
-    info: dict[str, Any]
+    datasets: Sequence[Continuous]
 
     def __len__(self) -> int:
         return sum(len(d) for d in self.datasets)
@@ -145,7 +85,7 @@ class CompositeDataset(Dataset):
                 break
         return d[i]
 
-    def train_test_split(self, ratio: float) -> tuple[CompositeDataset, CompositeDataset]:
+    def train_test_split(self, ratio: float) -> tuple[Composite, Composite]:
         datasets_train, datasets_test = [], []
         cumlen = 0.0
         for d in self.datasets:
@@ -155,8 +95,8 @@ class CompositeDataset(Dataset):
                 cumlen += thislen
             else:
                 datasets_test.append(d)
-        train = self.__class__(self.sampling_rate, datasets_train, self.detect_voice, self.info)
-        test = self.__class__(self.sampling_rate, datasets_test, self.detect_voice, self.info)
+        train = self.__class__(self.sampling_rate, datasets_train)
+        test = self.__class__(self.sampling_rate, datasets_test)
         log.debug(f"{len(train)=}, {len(test)=}")
         return train, test
 
@@ -169,69 +109,7 @@ class CompositeDataset(Dataset):
         return np.concatenate([d.Y for d in self.datasets], axis=0).astype("float32")
 
 
-class MegChunksDataset(CompositeDataset):
-    @classmethod
-    def from_config(
-        cls,
-        patient: MegPatientConfig,
-        lag_backward: int,
-        lag_forward: int,
-        transform: Transformer,
-        target_transform: TargetTransformer,
-    ):
-        X, X_sr, Y, Y_sr, mne_info, annotations = read_meg_chunks(patient)
-        log.debug(f"{len(X) / X_sr=:.2f}, {len(Y) / Y_sr=:.2f}")
-        X, new_sr = transform(X, mne_info["sfreq"])
-        info = {"mne_info": mne_info}
-        log.debug(f"{Y.dtype=}")
-        Y, new_sound_sr = target_transform(Y, Y_sr)  # , len(X))
-        dv = target_transform.detect_voice
-        log.debug("Finished transforming target")
-        Y = align_samples(Y, new_sound_sr, X, new_sr)
-        datasets: list[ContinuousDataset] = []
-        for s in get_good_slices(new_sr, annotations):
-            log.debug(f"{s=}")
-            X_slice, Y_slice = X[s, :], Y[s, :]
-            if len(X_slice) < lag_backward + lag_forward + 1:
-                continue
-            datasets.append(
-                MegDataset(X_slice, Y_slice, lag_backward, lag_forward, new_sr, dv, info)
-            )
-        res = cls(new_sr, datasets, datasets[0].detect_voice, info)
-        log.debug(f"{len(res)=}")
-        return res
-
-
-def get_good_slices(sr: float, annotations: list[tuple[float, float]]) -> list[slice]:
-    """Get slices for periods not annotated as bads"""
-    events = []
-    # when start and end occur simoultaneosly, first add new bad segment, then remove old
-    START = 0
-    END = 1
-    for onset, duration in annotations:
-        events.append((int(onset * sr), START))
-        events.append((int((onset + duration) * sr), END))
-    events.sort()
-    bad_overlap_cnt = 0
-
-    res = []
-    last_start = 0
-    for ev in events:
-        if ev[1] == START:
-            if bad_overlap_cnt == 0:
-                res.append(slice(last_start, ev[0]))
-            bad_overlap_cnt += 1
-        elif ev[1] == END:
-            bad_overlap_cnt -= 1
-            if bad_overlap_cnt == 0:
-                last_start = ev[0]
-    # process last event
-    if bad_overlap_cnt == 0:
-        res.append(slice(last_start, None))
-    return res
-
-
-class SimulatedDataset(ContinuousDataset):
+class SimulatedDataset(Continuous):
     RANDOM_SEED = 67
     FREQUENCY = 1000
     BETA = 1

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader  # type: ignore
 from tqdm import trange  # type: ignore
 
 from .bench_models_regression import BenchModelRegressionBase
-from .datasets import ContinuousDataset
+from .datasets import Continuous
 from .runner_common import get_random_predictions, infinite
 
 log = logging.getLogger(__name__)
@@ -73,7 +73,8 @@ def update_metrics(
     return metrics
 
 
-def run_regression(bench_model, dataset: ContinuousDataset, cfg):  # TODO: change dataset type
+# TODO: change dataset type
+def run_regression(bench_model, dataset: Continuous, cfg, detect_voice):
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
@@ -94,7 +95,7 @@ def run_regression(bench_model, dataset: ContinuousDataset, cfg):  # TODO: chang
     for i in trange(max_steps):
         x_train, y_train = next(train_generator)
         y_predicted, loss = train_batch(bench_model, x_train, y_train)
-        speech_idx = dataset.detect_voice(y_train.detach().numpy())
+        speech_idx = detect_voice(y_train.detach().numpy())
         update_metrics(
             bench_model,
             y_predicted,
@@ -106,7 +107,7 @@ def run_regression(bench_model, dataset: ContinuousDataset, cfg):  # TODO: chang
         )
 
         x_test, y_test = next(test_generator)
-        speech_idx = dataset.detect_voice(y_test.detach().numpy())
+        speech_idx = detect_voice(y_test.detach().numpy())
         y_predicted, loss = test_batch(bench_model, x_test, y_test)
         update_metrics(
             bench_model,

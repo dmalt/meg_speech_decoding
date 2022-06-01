@@ -18,21 +18,23 @@ model:
     filtering_size: 25
     envelope_size: 15
 dataset:
-    _target_: library.datasets.MegChunksDataset.from_config
+    _target_: library.io.speech_meg.read_chunks
     # _target_: library.datasets.MegDataset.from_config
-    transform:
-        _target_: library.transformers.MegPipeline
-        highpass: 2
-        lowpass: 120
-        notch_freqs: []
-        selected_channels: ${selected_channels}
-    target_transform:
-        _target_: library.transformers.MelspectrogramPipeline
-        dsamp_coef: 22
-        n_mels: ${target_features_cnt}
-        f_max: 2000
-    lag_backward: ${lag_backward}
-    lag_forward: ${lag_forward}
+    lags:
+        backward: ${lag_backward}
+        forward: ${lag_forward}
+    t:
+        # _target_: library.io.Transformers
+        transform_x:
+            _target_: library.transformers.MegPipeline
+            highpass: 2
+            lowpass: 120
+            notch_freqs: []
+            selected_channels: ${selected_channels}
+        transform_y:
+            _target_: library.transformers.MelspectrogramPipeline
+            dsamp_coef: 22
+            n_mels: ${target_features_cnt}
+            f_max: 2000
     # patient:
     #     annotations_path: null
-

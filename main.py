@@ -4,13 +4,12 @@ import os.path
 from time import perf_counter
 
 import hydra  # type: ignore
-from hydra.utils import instantiate  # type: ignore
-from omegaconf import OmegaConf  # type: ignore
-
 import setup_utils
+from hydra.utils import instantiate  # type: ignore
 from library.bench_models_regression import BenchModelRegressionBase
 from library.runner_classification import run_classification
 from library.runner_regression import run_regression
+from omegaconf import OmegaConf  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -31,14 +30,14 @@ def main(cfg):
             log.debug(f"{dir_name} dir created")
     log.info("Loading data...")
     t1 = perf_counter()
-    dataset = instantiate(cfg.dataset)
+    dataset, detect_voice, info = instantiate(cfg.dataset)
     t2 = perf_counter()
     log.info(f"Loading data finished in {t2 - t1:.2f} sec.")
 
     if "regression" in cfg.model:
         model = instantiate(cfg.model.regression)
         bench_model = BenchModelRegressionBase(model, cfg.model.learning_rate)
-        run_regression(bench_model, dataset, cfg.runner)
+        run_regression(bench_model, dataset, cfg.runner, detect_voice)
     elif cfg.model == "classification":
         run_classification(cfg.pipeline.model, cfg.patient, cfg.debug)
 
