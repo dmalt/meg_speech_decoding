@@ -22,9 +22,9 @@ dataset:
     # _target_: library.datasets.MegDataset.from_config
     transform:
         _target_: library.transformers.MegPipeline
-        highpass: 10
+        highpass: 2
         lowpass: 120
-        notch_freqs: [50, 100]
+        notch_freqs: []
         selected_channels: ${selected_channels}
     target_transform:
         _target_: library.transformers.MelspectrogramPipeline
