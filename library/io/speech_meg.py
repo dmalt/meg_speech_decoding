@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 import librosa as lb  # type: ignore
 import mne  # type: ignore
@@ -10,7 +10,7 @@ import numpy as np
 
 from ..datasets import Composite, Continuous
 from ..signal_processing import align_samples
-from ..type_aliases import SignalArray32, VoiceDetector
+from ..type_aliases import Array32, SignalArray32, VoiceDetector
 from . import Lags, Transformers
 
 log = logging.getLogger(__name__)
@@ -72,7 +72,7 @@ def read_chunks(patient: PatientConfig, lags: Lags, t: Transformers) -> Composit
 
 def _read(patient: PatientConfig) -> tuple[SignalArray32, SignalArray32, float, mne.Info]:
     raw = mne.io.read_raw_fif(patient.raw_path, verbose="ERROR", preload=True)
-    audio, audio_sr = lb.load(patient.audio_path, sr=None)
+    audio, audio_sr = lb.load(patient.audio_path, sr=None)  # type: ignore
     assert abs(len(raw.times) / raw.info["sfreq"] - len(audio) / audio_sr) < 1
     info_audio = mne.create_info(["audio"], sfreq=audio_sr)
     audio_raw = mne.io.RawArray(audio[np.newaxis, :], info_audio)
