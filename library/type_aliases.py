@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
@@ -6,18 +6,17 @@ import numpy.typing as npt
 Array = npt.NDArray[Any]
 Array32 = npt.NDArray[np.float32]
 
-SignalArray = npt.NDArray[Any]  # array of shape (n_samples, n_sensors)
-SignalArray32 = npt.NDArray[np.float32]  # array of shape (n_samples, n_sensors)
-SignalArrayTransposed32 = npt.NDArray[np.float32]  # array of shape (n_sensors, n_samples)
+Signal = npt.NDArray[Any]  # array of shape (n_samples, n_sensors)
+Signal32 = npt.NDArray[np.float32]  # array of shape (n_samples, n_sensors)
+Signal32_T = npt.NDArray[np.float32]  # array of shape (n_sensors, n_samples)
 
-BatchSignalArray = npt.NDArray[Any]  # array of shape (batch_size, n_samples, n_sensors)
-BatchSignalArray32 = npt.NDArray[np.float32]  # array of shape (batch_size, n_samples, n_sensors)
-BatchSignalArrayMask = npt.NDArray[np.bool_]  # array of shape (n_samples, n_sensors)
+# TODO: check batch shape. Maybe sensors and samples should be swapped
+BatchSignal = npt.NDArray[Any]  # array of shape (batch_size, n_samples, n_sensors)
+BatchSignal32 = npt.NDArray[np.float32]  # array of shape (batch_size, n_samples, n_sensors)
+BatchSignalMask = npt.NDArray[np.bool_]  # array of shape (n_samples, n_sensors)
 
-TargetArray32 = npt.NDArray[np.float32]  # array of shape (n_sensors,)
+Samples32 = npt.NDArray[np.float32]  # array of shape (n_samples,)
+Sensors32 = npt.NDArray[np.float32]  # array of shape (n_sensors,)
 
-VoiceDetector = Callable[[BatchSignalArray], Optional[BatchSignalArrayMask]]
-
-Transformer = Callable[[SignalArray, float], Tuple[SignalArray32, float]]
-
-Info = Dict[str, Any]
+VoiceDetector = Callable[[BatchSignal], Optional[BatchSignalMask]]
+Transformer = Callable[[Signal, float], Tuple[Signal32, float]]

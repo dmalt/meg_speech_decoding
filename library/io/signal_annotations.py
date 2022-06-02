@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import NamedTuple, Sequence
+from typing import List, NamedTuple, Sequence
 
 from mne.io import BaseRaw  # type: ignore
 
@@ -11,7 +11,12 @@ class Annotation(NamedTuple):
     type: str
 
 
-def from_raw(raw: BaseRaw) -> list[Annotation]:
+Annotations = List[Annotation]
+
+
+def from_raw(raw: BaseRaw) -> Annotations:
+    if not hasattr(raw, "annotations"):
+        return []
     onsets: list[float] = list(raw.annotations.onset)
     durations: list[float] = list(raw.annotations.duration)
     types: list[str] = list(raw.annotations.description)
@@ -25,7 +30,6 @@ def get_good_slices(annotations: Sequence[Annotation], sr: float) -> list[slice]
     # when start and end occur simoultaneosly, first add new bad segment, then remove old
     START = 0
     END = 1
-    # mypy doesnt believe __getitem__ makes it iterable
     for onset, duration, _ in filter(lambda a: a.type.startswith("BAD"), annotations):
         events.append((int(onset * sr), START))
         events.append((int((onset + duration) * sr), END))
