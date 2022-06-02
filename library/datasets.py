@@ -12,7 +12,6 @@ from .transformers import TargetTransformer
 from .type_aliases import Array, SignalArray, SignalArray32, SignalArrayTransposed32, TargetArray32
 
 log = logging.getLogger(__name__)
-
 TDataset = TypeVar("TDataset", bound="Continuous")
 
 
@@ -43,6 +42,7 @@ class Continuous(Dataset):
         raw.info for MEG
 
     """
+
     X: SignalArray32
     Y: SignalArray32
     lag_backward: int
@@ -178,7 +178,7 @@ class SimulatedDataset(Continuous):
 
         envelopes = cls.get_envelopes(filtered_signals)
         target = scs.convolve2d(
-            np.pad(envelopes, pad_width=((2, 2), (0, 0)), mode="edge"),
+            np.pad(envelopes, pad_width=((2, 2), (0, 0)), mode="edge"),  # type: ignore
             weight_matrix,
             mode="valid",
         )
