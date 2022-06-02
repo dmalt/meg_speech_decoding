@@ -100,16 +100,18 @@ def _copy_annotations(raw_from: mne.io.BaseRaw, raw_to: mne.io.BaseRaw) -> None:
     raw_to.set_annotations(raw_from.annotations)
 
 
-def _read_chunks(patient: PatientConfig):
+def _read_chunks(
+    patient: PatientConfig,
+) -> tuple[SignalArray32, Array32, float, mne.Info, list[tuple[Any, Any]]]:
     raw = mne.io.read_raw_fif(patient.raw_path, verbose="ERROR", preload=True)
     if patient.annotations_path is not None:
         annots = mne.read_annotations(patient.annotations_path)
         raw.set_annotations(annots)
-    X = raw.get_data(picks="meg").astype("float32").T
-    audio, audio_sr = lb.load(patient.audio_path, sr=None)
+    X: SignalArray32 = raw.get_data(picks="meg").astype("float32").T
+    audio, audio_sr = lb.load(patient.audio_path, sr=None)  # type: ignore
     onsets = map(lambda x: x - raw.first_samp / raw.info["sfreq"], raw.annotations.onset)
     annotations = sorted(zip(onsets, raw.annotations.duration))
-    return X, audio, audio_sr, raw.info, annotations
+    return X, audio, audio_sr, cast(mne.Info, raw.info), annotations
 
 
 def _get_good_slices(sr: float, annotations: Annotations) -> list[slice]:

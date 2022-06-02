@@ -82,8 +82,8 @@ class Composite(Dataset):
             if i // len(d):
                 i -= len(d)
             else:
-                break
-        return d[i]
+                return d[i]
+        raise IndexError("Dataset is empty")
 
     def train_test_split(self, ratio: float) -> tuple[Composite, Composite]:
         datasets_train, datasets_test = [], []
