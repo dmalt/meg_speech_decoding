@@ -3,13 +3,13 @@ import os
 import os.path
 from time import perf_counter
 
-import hydra  # type: ignore
+import hydra
 import setup_utils
-from hydra.utils import instantiate  # type: ignore
+from hydra.utils import instantiate
 from library.bench_models_regression import BenchModelRegressionBase
 from library.runner_classification import run_classification
 from library.runner_regression import run_regression
-from omegaconf import OmegaConf  # type: ignore
+from omegaconf import OmegaConf
 
 log = logging.getLogger(__name__)
 
