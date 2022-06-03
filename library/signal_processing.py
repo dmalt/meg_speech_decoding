@@ -12,25 +12,25 @@ import scipy.interpolate as sci  # type: ignore
 import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
-from .type_aliases import Array, Array32
+from .type_aliases import Array32, Signal, Signal32
 
 log = logging.getLogger(__name__)
 
 
-def remove_eyes_artifacts(signal: npt.NDArray, sr: float) -> npt.NDArray:
-    return Filter(signal, sr).highpass(lowcut=10, order=5).signal
+def remove_eyes_artifacts(signal: Signal) -> npt.NDArray:
+    return Filter(signal).highpass(lowcut=10, order=5).signal.data
 
 
-def remove_target_leakage(signal: npt.NDArray, sr: float) -> npt.NDArray:
-    return Filter(signal, sr).lowpass(highcut=200, order=5).signal
+def remove_target_leakage(signal: Signal) -> npt.NDArray:
+    return Filter(signal).lowpass(highcut=200, order=5).signal.data
 
 
-def remove_silent_noise(sound: npt.NDArray, sr: float) -> npt.NDArray:
+def remove_silent_noise(sound: Signal) -> npt.NDArray:
     NOISE_THRESHOLD = 0.01
-    window = int(sr / 2)
-    smoothed_amp = Filter(np.abs(sound), sr).moving_avarage(window).signal
-    sound_without_noise: npt.NDArray = np.copy(sound)
-    sound_without_noise[smoothed_amp < NOISE_THRESHOLD] = -1
+    window = int(sound.sr / 2)
+    smoothed_amp = Filter(Signal(np.abs(sound.data), sound.sr)).moving_avarage(window).signal
+    sound_without_noise: npt.NDArray = np.copy(sound.data)
+    sound_without_noise[smoothed_amp.data < NOISE_THRESHOLD] = -1
     return sound_without_noise
 
 
@@ -41,30 +41,27 @@ class Filter:
 
     Parameters
     ----------
-    signal: array of shape(n_samples, ...)
+    signal: Signal
         Target signal
-    sr: float
-        Sampling rate
 
     """
 
-    signal: npt.NDArray
-    sr: float
+    signal: Signal
 
     def lowpass(self, highcut: float, order: int) -> "Filter":
-        b, a = scs.butter(order, highcut, btype="low", fs=self.sr)
-        self.signal = scs.filtfilt(b, a, self.signal, axis=0)
+        b, a = scs.butter(order, highcut, btype="low", fs=self.signal.sr)
+        self.signal.data = scs.filtfilt(b, a, self.signal.data, axis=0)
         return self
 
     def highpass(self, lowcut: float, order: int) -> "Filter":
-        b, a = scs.butter(order, lowcut, btype="highpass", fs=self.sr)
-        self.signal = scs.filtfilt(b, a, self.signal, axis=0)
+        b, a = scs.butter(order, lowcut, btype="highpass", fs=self.signal.sr)
+        self.signal.data = scs.filtfilt(b, a, self.signal.data, axis=0)
         return self
 
     def bandpass(self, lowcut: float, highcut: float, order: int) -> "Filter":
         freqs = (lowcut, highcut)
-        b, a = scs.butter(order, freqs, btype="bandpass", fs=self.sr)
-        self.signal = scs.filtfilt(b, a, self.signal, axis=0)
+        b, a = scs.butter(order, freqs, btype="bandpass", fs=self.signal.sr)
+        self.signal.data = scs.filtfilt(b, a, self.signal.data, axis=0)
         return self
 
     def filter(self, lowcut: Optional[float], highcut: Optional[float], order: int) -> "Filter":
@@ -83,24 +80,24 @@ class Filter:
 
     def moving_avarage(self, window: int) -> "Filter":
         w2 = int(window // 2)
-        padded: npt.NDArray = np.pad(self.signal, (w2, w2), "constant", constant_values=0)
+        padded: npt.NDArray = np.pad(self.signal.data, (w2, w2), "constant", constant_values=0)
         pad_cumsum = np.cumsum(padded)
-        self.signal = (pad_cumsum[w2 * 2 :] - pad_cumsum[: -w2 * 2]) / window
+        self.signal.data = (pad_cumsum[w2 * 2 :] - pad_cumsum[: -w2 * 2]) / window
         return self
 
     def log_envelope(self, highcut: float = 200, lowcut: float = 200) -> "Filter":
         self.lowpass(highcut=highcut, order=3)
-        self.signal = np.log(np.abs(self.signal))
+        self.signal.data = np.log(np.abs(self.signal.data))
         self.highpass(lowcut, order=5)
         return self
 
     def envelope(self) -> "Filter":
-        self.signal = np.abs(scs.hilbert(self.signal, axis=0))
+        self.signal.data = np.abs(scs.hilbert(self.signal.data, axis=0))
         return self
 
     def notch(self, freq: float, Q: float) -> "Filter":
-        b, a = scs.iirnotch(freq, Q=Q, fs=self.sr)
-        self.signal = scs.filtfilt(b, a, self.signal, axis=0)
+        b, a = scs.iirnotch(freq, Q=Q, fs=self.signal.sr)
+        self.signal.data = scs.filtfilt(b, a, self.signal.data, axis=0)
         return self
 
     def notch_narrow(self, freq: float) -> "Filter":
@@ -119,15 +116,12 @@ class SpectralFeatures:
 
     Parameters
     ----------
-    signal: array of shape(n_samples, ...)
+    signal: Signal
         Target signal
-    sr: float
-        Sampling rate
 
     """
 
-    signal: npt.NDArray
-    sr: float
+    signal: Signal
 
     def asd(self, n: Optional[int] = None) -> tuple[npt.NDArray[Any], npt.NDArray]:
         """
@@ -152,69 +146,70 @@ class SpectralFeatures:
         numpy.fft.fftfreq
 
         """
-        apm_spec = np.abs(np.fft.fft(self.signal, n, axis=0))
-        n = self.signal.shape[-1] if n is None else n
-        freqs = np.fft.fftfreq(n, 1 / self.sr)
+        apm_spec = np.abs(np.fft.fft(self.signal.data, n, axis=0))
+        n = self.signal.data.shape[-1] if n is None else n
+        freqs = np.fft.fftfreq(n, 1 / self.signal.sr)
         end = len(freqs) // 2
-        assert n // 2 == end, f"{n=}, {end=}, {self.signal.shape=}, {freqs=}"
+        assert n // 2 == end, f"{n=}, {end=}, {self.signal.data.shape=}, {freqs=}"
         return freqs[:end], apm_spec[..., :end]
 
     def mfccs(self, d: int, out_nsamp: int, n_mfcc: int) -> npt.NDArray:
-        m = lbf.mfcc(y=self.signal, sr=self.sr, hop_length=d, n_mfcc=n_mfcc)
+        m = lbf.mfcc(y=self.signal, sr=int(self.signal.sr), hop_length=d, n_mfcc=n_mfcc)
         mfccs_resampled: npt.NDArray = scs.resample(x=m.T, num=out_nsamp)
         return mfccs_resampled
 
     def logmelspec(self, n: int, f_max: float, d: int) -> tuple[npt.NDArray[np.double], float]:
-        melspec = lbf.melspectrogram(y=self.signal, sr=self.sr, n_mels=n, fmax=f_max, hop_length=d)
-        return lb.power_to_db(melspec, ref=np.max).T, self.sr / d
+        melspec = lbf.melspectrogram(
+            y=self.signal, sr=int(self.signal.sr), n_mels=n, fmax=f_max, hop_length=d
+        )
+        return lb.power_to_db(melspec, ref=np.max).T, self.signal.sr / d  # pyright: ignore
 
 
 def preprocess_meg(
-    signal: Array, sr: float,
+    signal: Signal,
     selected_channels: Optional[list[int]],
     lowpass: Optional[float],
     highpass: Optional[float],
     notch_freqs: list[float],
-) -> tuple[Array32, float]:
+) -> Signal32:
 
     if selected_channels is not None:
-        signal = signal[:, selected_channels]
-    filt = Filter(signal, sr)
+        signal.data = signal.data[:, selected_channels]  # pyright: ignore
+    filt = Filter(signal)
     filt.filter(highpass, lowpass, order=5)
     for f in notch_freqs:
         filt.notch_narrow(f)
-    res = skp.scale(filt.signal.astype("float64")).astype("float32")
-    return res, sr
+    res = skp.scale(filt.signal.data.astype("float64")).astype("float32")
+    return Signal32(res, signal.sr)
 
 
 def preprocess_ecog(
-    ecog: Array,
-    sr: float,
+    ecog: Signal32,
     dsamp_coef: int,
     highpass: Optional[float],
     lowpass: Optional[float],
     notch_narrow_freqs: list[float],
     notch_wide_freqs: list[float],
     selected_channels: Optional[list[int]],
-):
+) -> Signal32:
     if selected_channels is not None:
-        ecog = ecog[:, selected_channels]
-    ecog = scs.decimate(ecog, dsamp_coef, axis=0)
-    new_sr = int(sr / dsamp_coef)
+        ecog.data = ecog.data[:, selected_channels]  # pyright: ignore
+    ecog = scs.decimate(ecog.data, dsamp_coef, axis=0)
+    new_sr = int(ecog.sr / dsamp_coef)
 
-    filt = Filter(ecog, new_sr)
+    filt = Filter(ecog)
     filt.filter(highpass, lowpass, order=5)
     for p in notch_narrow_freqs:
         filt.notch_narrow(p)
     for p in notch_wide_freqs:
         filt.notch_wide(p)
 
-    return skp.scale(filt.signal).astype("float32"), new_sr
+    return Signal32(skp.scale(filt.signal).astype("float32"), new_sr)
 
 
-def melspectrogram_pipeline(signal, sr, n_mels, f_max, dsamp_coef):
-    signal /= np.max(np.abs(signal))
-    sf = SpectralFeatures(signal, sr)
+def melspectrogram_pipeline(signal, n_mels, f_max, dsamp_coef):
+    signal.data /= np.max(np.abs(signal.data))
+    sf = SpectralFeatures(signal)
     melspec, sr_new = sf.logmelspec(n_mels, f_max, dsamp_coef)
     # Converting to float64 before scaling is necessary: otherwise it's not enough
     # precision which results in a warning about numerical error from sklearn
@@ -224,15 +219,18 @@ def melspectrogram_pipeline(signal, sr, n_mels, f_max, dsamp_coef):
     return melspec_scaled, sr_new
 
 
-def align_samples(sig_from: Array, sr_from: float, sig_to: Array, sr_to: float) -> Array32:
-    log.info(f"Aligning samples: {len(sig_from)=}, {sr_from=:.2f}, {len(sig_to)=}, {sr_to=:.2f}")
-    if len(sig_from) == len(sig_to) and sr_from == sr_to:
-        return sig_from
+def align_samples(sig_from: Signal, sig_to: Signal) -> Signal:
+    log.info("Aligning samples")
+    log.info(f"{sig_from=}")
+    log.info(f"{sig_to=}")
+    if len(sig_from) == len(sig_to) and sig_from.sr == sig_from.sr:
+        return Signal32(sig_to.data.astype("float32"), sig_to.sr)
     samp_from = np.arange(len(sig_from))
-    itp = sci.interp1d(samp_from, sig_from, bounds_error=False, fill_value="extrapolate", axis=0)
-    samp_to = (np.arange(len(sig_to)) * (sr_from / sr_to)).astype(int)
-    interp: Array32 = itp(samp_to).astype("float32")
-    return interp
+    interp_params = dict(bounds_error=False, fill_value="extrapolate", axis=0)
+    itp = sci.interp1d(samp_from, sig_from.data, **interp_params)
+    samp_to = (np.arange(len(sig_to)) * (sig_from.sr / sig_to.sr)).astype(int)
+    interp = itp(samp_to)
+    return Signal(interp, sig_to.sr)
 
 
 # def classic_lpc_pipeline(sound, sampling_rate, downsampling_coef, ecog_size, order):

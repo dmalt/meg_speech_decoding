@@ -4,7 +4,7 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Optional, Protocol
+from typing import Callable, Optional, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +12,7 @@ import sklearn.preprocessing as skp  # type: ignore
 from joblib import Memory  # type: ignore
 
 from . import signal_processing as sp
-from .type_aliases import Array, Array32
+from .type_aliases import Array, Array32, Signal32, as_32
 
 memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 log = logging.getLogger(__name__)
@@ -26,6 +26,29 @@ class Transformer(Protocol):
 class TargetTransformer(Transformer, Protocol):
     def detect_voice(self, y_batch: Array) -> Optional[npt.NDArray[np.bool_]]:
         ...
+
+
+@dataclass
+class AlignedData:
+    """Timeseries data with X and Y of equal length and sampling rate"""
+    X: Signal32
+    Y: Signal32
+
+    def __post_init__(self):
+        assert len(self.X.data) == len(self.Y.data)
+        assert self.X.sr == self.Y.sr
+
+
+@dataclass
+class DataTransformer:
+    transform_x: Callable[[Signal32], Signal32]
+    transform_y: Callable[[Signal32], Signal32]
+
+    def transform(self, X: Signal32, Y: Signal32) -> AlignedData:
+        X = self.transform_x(X)
+        Y = self.transform_y(Y)
+        Y = as_32(sp.align_samples(Y, X))
+        return AlignedData(X, Y)
 
 
 @dataclass
