@@ -1,4 +1,4 @@
-from library.io.signal_annotations import Annotation, get_good_slices
+from library.signal import Annotation, get_good_slices
 
 
 def test_get_good_slices():
