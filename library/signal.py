@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Generic, List, NamedTuple, Sequence, TypeVar
+from typing import Generic, List, NamedTuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
@@ -42,7 +42,7 @@ class Signal(Generic[T]):
 
     def __len__(self) -> int:
         """Signal length in samples"""
-        return len(self.data)
+        return self.n_samples
 
     def __array__(self, dtype=None) -> npt.NDArray["np.floating[T]"]:
         if dtype is not None:
@@ -65,7 +65,22 @@ class Signal(Generic[T]):
         return self.data.dtype
 
 
-def get_good_slices(annotations: Sequence[Annotation], sr: float) -> list[slice]:
+def drop_bad_segments(signal: Signal[T]) -> Signal[T]:
+    good_slices = get_good_slices(signal.annotations, signal.sr)
+    good_data: npt.NDArray[np.floating[T]] = np.concatenate([signal.data[s] for s in good_slices])
+    continuous_annotations: list[Annotation] = []
+    prev_time = 0.0
+    for s in good_slices:
+        onset = prev_time
+        stop_samp = len(signal) if s.stop is None else s.stop
+        duration = (stop_samp - s.start) / signal.sr
+        continuous_annotations.append(Annotation(onset, duration, type="CONTINUOUS"))
+        prev_time = duration
+
+    return Signal(good_data, signal.sr, continuous_annotations)
+
+
+def get_good_slices(annotations: Annotations, sr: float) -> list[slice]:
     """Get slices for periods with types not starting with 'BAD'"""
     events = []
     # when start and end occur simoultaneosly, first add new bad segment, then remove old
