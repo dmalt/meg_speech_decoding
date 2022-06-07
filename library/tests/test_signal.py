@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from library.signal import Annotation, Signal, drop_bad_segments
+from library.signal import Annotation, Signal, drop_bad_segments, split_into_good_segments
 
 # def test_get_good_slices():
 #     chunks = _get_good_slices([Annotation(10, 5, "BAD"), Annotation(11, 5, "BAD")], sr=1)
@@ -25,17 +25,39 @@ def test_drop_bad_segments_creates_proper_annotations(signal: Signal) -> None:
         Annotation(1.2, 2, "BAD"),
         Annotation(4, 1, "BAD"),
         Annotation(0.1, 5, "GOOD"),
+        Annotation(6, 1, "GOOD"),
+        Annotation(6.5, 0, "BAD_BOUNDARY")
     ]
     wo_bads = drop_bad_segments(signal)
-    wo_bads.annotations = [
-        Annotation(round(a.onset, 4), round(a.duration, 4), a.type) for a in wo_bads.annotations
-    ]
-    # assert len(wo_bads.annotations) == 2
     assert Annotation(0.2, 0, "BAD_BOUNDARY") in wo_bads.annotations
     assert Annotation(1, 0, "BAD_BOUNDARY") in wo_bads.annotations
     assert Annotation(0.1, 0.1, "GOOD") in wo_bads.annotations
     assert Annotation(0.2, 0.8, "GOOD") in wo_bads.annotations
     assert Annotation(1, 0.1, "GOOD") in wo_bads.annotations
-    assert len(wo_bads) == len(signal) - 4 * signal.sr
-    # assert wo_bads_annots[0] == Annotation(0, 0.2, "CONTINUOUS")
-    # assert wo_bads_annots[1] == Annotation(0.2, len(signal) / signal.sr - 2.2, "CONTINUOUS")
+    assert Annotation(2, 0.5, "GOOD") in wo_bads.annotations
+    assert Annotation(2.5, 0.5, "GOOD") in wo_bads.annotations
+    assert Annotation(2.5, 0, "BAD_BOUNDARY") in wo_bads.annotations
+
+
+def test_split_into_good_segments(signal: Signal) -> None:
+    signal.annotations = [
+        Annotation(0.2, 2, "BAD"),
+        Annotation(1.2, 2, "BAD"),
+        Annotation(4, 1, "BAD"),
+        Annotation(0.1, 5, "GOOD"),
+        Annotation(6, 1, "GOOD"),
+        Annotation(6.5, 0, "BAD_BOUNDARY")
+    ]
+    segments = split_into_good_segments(signal)
+    sr = signal.sr
+    assert len(segments[0]) / sr == signal.annotations[0].onset
+    assert segments[0].annotations == [Annotation(0.1, 0.1, "GOOD")]
+
+    assert len(segments[1]) / sr == 0.8
+    assert segments[1].annotations == [Annotation(0, 0.8, "GOOD")]
+
+    assert len(segments[2]) / sr == 1.5
+    assert segments[2].annotations == [Annotation(0, 0.1, "GOOD"), Annotation(1, 0.5, "GOOD")]
+
+    assert len(segments[3]) / sr == len(signal) / sr - 4 - 2.5
+    assert segments[3].annotations == [Annotation(0, 0.5, "GOOD")]
