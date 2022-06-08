@@ -17,13 +17,15 @@ class Annotation(NamedTuple):
 
 Annotations = List[Annotation]
 
+
 SignalArray = npt.NDArray[np.floating[T]]  # array of shape (n_samples, n_sensors)
 
 
 @dataclass
 class Signal(Generic[T]):
     """
-    Timeseries stored as numpy array with sampling rate
+    Timeseries stored as numpy array together with sampling rate and
+    annotations
 
     Parameters
     ----------
@@ -46,7 +48,7 @@ class Signal(Generic[T]):
         """Signal length in samples"""
         return self.n_samples
 
-    def __array__(self, dtype=None) -> npt.NDArray[np.floating[T]]:
+    def __array__(self, dtype=None) -> SignalArray[T]:
         if dtype is not None:
             return self.data.astype(dtype)
         return self.data
@@ -56,7 +58,7 @@ class Signal(Generic[T]):
             f"signal of shape={self.data.shape} sampled at {self.sr} Hz; duration={self.duration}"
         )
 
-    def update(self, data: npt.NDArray[np.floating[T]]) -> Signal[T]:
+    def update(self, data: SignalArray[T]) -> Signal[T]:
         assert len(data) == len(self), f"Can only update with equal length data; got {len(data)=}"
         return self.__class__(data, self.sr, self.annotations)
 

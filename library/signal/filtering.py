@@ -1,7 +1,6 @@
 from typing import Optional
 
 import numpy as np
-import numpy.typing as npt
 import scipy.signal as scs  # type: ignore
 
 from . import Signal, SignalArray, T
@@ -28,30 +27,30 @@ class ButterFiltFilt:
             data = self._bandpass(signal)
         return signal.update(data)
 
-    def _lowpass(self, signal: Signal[T]) -> npt.NDArray["np.floating[T]"]:
+    def _lowpass(self, signal: Signal[T]) -> SignalArray[T]:
         b, a = scs.butter(self.order, self.h_freq, btype="low", fs=signal.sr)
         return scs.filtfilt(b, a, signal, axis=0).astype(signal.dtype)
 
-    def _highpass(self, signal: Signal[T]) -> npt.NDArray["np.floating[T]"]:
+    def _highpass(self, signal: Signal[T]) -> SignalArray[T]:
         b, a = scs.butter(self.order, self.l_freq, btype="highpass", fs=signal.sr)
         return scs.filtfilt(b, a, signal.data, axis=0).astype(signal.dtype)
 
-    def _bandpass(self, signal: Signal[T]) -> npt.NDArray["np.floating[T]"]:
+    def _bandpass(self, signal: Signal[T]) -> SignalArray[T]:
         freqs = (self.l_freq, self.h_freq)
         b, a = scs.butter(self.order, freqs, btype="bandpass", fs=signal.sr)
         return scs.filtfilt(b, a, signal.data, axis=0).astype(signal.dtype)
 
 
-def moving_avarage(signal: Signal, window: int) -> Signal:
+def moving_avarage(signal: Signal[T], window: int) -> Signal[T]:
     w2 = int(window // 2)
-    padded: SignalArray = np.pad(signal.data, (w2, w2), "constant", constant_values=0)
+    padded = np.pad(signal.data, (w2, w2), "constant", constant_values=0)
     pad_cumsum = np.cumsum(padded)
     data = (pad_cumsum[w2 * 2 :] - pad_cumsum[: -w2 * 2]) / window  # pyright: ignore
-    return Signal(data, signal.sr)
+    return signal.update(data.astype(signal.dtype))
 
 
 def hilbert_envelope(signal: Signal[T]) -> Signal[T]:
-    data = np.abs(scs.hilbert(signal, axis=0))
+    data = np.abs(scs.hilbert(signal, axis=0)).astype(signal.dtype)
     return signal.update(data)
 
 

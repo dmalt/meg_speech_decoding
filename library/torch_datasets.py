@@ -2,22 +2,19 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Protocol, Sequence, TypeVar
+from typing import Callable, Sequence, TypeVar
 
 import numpy as np
+import numpy.typing as npt
 import scipy.signal as scs  # type: ignore
 from torch.utils.data import Dataset
 
-from .transformers import TargetTransformer
-from .type_aliases import Array, SignalArray, SignalArray32, SignalArrayTransposed32, TargetArray32
+from .signal import Signal, SignalArray
+from .type_aliases import ChannelsVector32, SignalArray32_T
 
 log = logging.getLogger(__name__)
+
 TDataset = TypeVar("TDataset", bound="Continuous")
-
-
-class InterpretableDataset(Protocol):
-    X: SignalArray32
-    sampling_rate: float
 
 
 @dataclass
@@ -31,28 +28,18 @@ class Continuous(Dataset):
         Number of samples before the target sample to include in one chunk
     lag_forward : int
         Number of samples after the target sample to include in one chunk
-    sampling_rate : float
-        Signal sampling rate
-    detect_voice : callable
-        Function to get boolean mask of voice in transformed sound batch;
-        accepts a batch of target data and returns a boolean mask array of
-        the same size
-    info: dict
-        Any additional info, e.g. mixing matrix for simulated dataset or
-        raw.info for MEG
 
     """
 
-    X: SignalArray32
-    Y: SignalArray32
+    X: SignalArray[npt._32Bit]
+    Y: SignalArray[npt._32Bit]
     lag_backward: int
     lag_forward: int
-    sampling_rate: float
 
     def __len__(self) -> int:
         return len(self.X) - self.lag_backward - self.lag_forward
 
-    def __getitem__(self, i: int) -> tuple[SignalArrayTransposed32, TargetArray32]:
+    def __getitem__(self, i: int) -> tuple[SignalArray32_T, ChannelsVector32]:
         X = self.X[i : i + self.lag_forward + self.lag_backward + 1].T
         Y = self.Y[i + self.lag_backward]
         return X, Y
@@ -61,9 +48,8 @@ class Continuous(Dataset):
         train_size = int(len(self.X) * ratio)
         X_train, Y_train = self.X[:train_size], self.Y[:train_size]
         X_test, Y_test = self.X[train_size:], self.Y[train_size:]
-        lb, lf, sr = self.lag_backward, self.lag_forward, self.sampling_rate
-        dataset_train = self.__class__(X_train, Y_train, lb, lf, sr)
-        dataset_test = self.__class__(X_test, Y_test, lb, lf, sr)
+        dataset_train = self.__class__(X_train, Y_train, self.lag_backward, self.lag_forward)
+        dataset_test = self.__class__(X_test, Y_test, self.lag_backward, self.lag_forward)
         return dataset_train, dataset_test
 
 
@@ -75,7 +61,7 @@ class Composite(Dataset):
     def __len__(self) -> int:
         return sum(len(d) for d in self.datasets)
 
-    def __getitem__(self, i: int) -> tuple[SignalArrayTransposed32, TargetArray32]:
+    def __getitem__(self, i: int) -> tuple[SignalArray32_T, ChannelsVector32]:
         if i > len(self):
             raise IndexError(f"Index {i} is out of bounds for dataset of size {len(self)}")
         for d in self.datasets:
@@ -101,11 +87,11 @@ class Composite(Dataset):
         return train, test
 
     @property
-    def X(self) -> SignalArray32:
+    def X(self) -> SignalArray[npt._32Bit]:
         return np.concatenate([d.X for d in self.datasets], axis=0).astype("float32")
 
     @property
-    def Y(self) -> SignalArray32:
+    def Y(self) -> SignalArray[npt._32Bit]:
         return np.concatenate([d.Y for d in self.datasets], axis=0).astype("float32")
 
 
@@ -134,7 +120,7 @@ class SimulatedDataset(Continuous):
         patient,
         lag_backward: int,
         lag_forward: int,
-        transform: Callable[[SignalArray, float], tuple[SignalArray32, float]],
+        transform: Callable[[Signal, float], tuple[Signal32, float]],
         target_transform: TargetTransformer,
     ) -> SimulatedDataset:
         from colorednoise import powerlaw_psd_gaussian  # type: ignore
