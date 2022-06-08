@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Generic, List, NamedTuple, Optional, TypeVar
+from typing import Generic, List, NamedTuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
