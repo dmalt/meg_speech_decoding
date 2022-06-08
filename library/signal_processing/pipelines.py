@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from functools import partial
 from typing import Optional
 
 import numpy as np
@@ -8,59 +9,74 @@ import numpy.typing as npt
 import scipy.interpolate as sci  # type: ignore
 import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
-from library.io.signal_annotations import Annotations  # type: ignore
 
-from ..type_aliases import Array32, Signal, Signal32, as_float32
-from .filtering import filter, highpass, lowpass, moving_avarage, notch_narrow, notch_wide
+from ..signal import Signal, T, drop_bad_segments
+from ..type_aliases import Array32
+from . import compose_processors
+from .filtering import ButterFiltFilt, moving_avarage, notch_narrow, notch_wide
 from .spectral import logmelspec
 
 log = logging.getLogger(__name__)
 
 
-def remove_eyes_artifacts(signal: Signal) -> npt.NDArray:
-    return highpass(signal, lowcut=10, order=5).data
+def remove_eyes_artifacts(signal: Signal[T]) -> Signal[T]:
+    filter = ButterFiltFilt(order=5, l_freq=10)
+    return filter(signal)
 
 
-def remove_target_leakage(signal: Signal) -> npt.NDArray:
-    return lowpass(signal, highcut=200, order=5).data
+def remove_target_leakage(signal: Signal[T]) -> Signal[T]:
+    filter = ButterFiltFilt(order=5, h_freq=200)
+    return filter(signal)
 
 
-def remove_silent_noise(sound: Signal) -> npt.NDArray:
+def preprocess_meg(
+    signal: Signal[T],
+    selected_channels: list[int] | None,
+    l_freq: float | None,
+    h_freq: float | None,
+    notch_freqs: list[float],
+) -> Signal[T]:
+
+    pipeline = compose_processors(
+        partial(select_channels, selected_channels=selected_channels),
+        ButterFiltFilt(order=5, l_freq=l_freq, h_freq=h_freq),
+        compose_processors(*(partial(notch_narrow, freq=f) for f in notch_freqs)),
+        drop_bad_segments,
+        scale,
+    )
+    return pipeline(signal)
+
+
+def select_channels(signal: Signal[T], selected_channels: list[int] | None) -> Signal[T]:
+    if selected_channels is not None:
+        return signal.update(signal.data[:, selected_channels])
+    return signal
+
+
+def scale(signal: Signal[T]) -> Signal[T]:
+    scaled_data = skp.scale(signal.data.astype("float64"))
+    return signal.update(scaled_data.astype(signal.dtype))
+
+
+# TODO: everything below need refactoring
+def remove_silent_noise(sound: Signal[T]) -> npt.NDArray:
     NOISE_THRESHOLD = 0.01
     window = int(sound.sr / 2)
-    smoothed_amp = moving_avarage(Signal(np.abs(sound.data), sound.sr), window)
-    sound_without_noise: npt.NDArray = np.copy(sound.data)
+    smoothed_amp = moving_avarage(sound.update(np.abs(sound)), window)
+    sound_without_noise: npt.NDArray = np.copy(sound)
     sound_without_noise[smoothed_amp.data < NOISE_THRESHOLD] = -1
     return sound_without_noise
 
 
-def preprocess_meg(
-    signal: Signal,
-    selected_channels: Optional[list[int]],
-    lowpass: Optional[float],
-    highpass: Optional[float],
-    notch_freqs: list[float],
-    annotations: Annotations,
-) -> Signal32:
-
-    if selected_channels is not None:
-        signal.data = signal.data[:, selected_channels]  # pyright: ignore
-    signal = filter(signal, highpass, lowpass, order=5)
-    for f in notch_freqs:
-        signal = notch_narrow(signal, f)
-    res = skp.scale(signal.data.astype("float64")).astype("float32")
-    return Signal32(res, signal.sr)
-
-
 def preprocess_ecog(
-    ecog: Signal32,
+    ecog: Signal[T],
     dsamp_coef: int,
     highpass: Optional[float],
     lowpass: Optional[float],
     notch_narrow_freqs: list[float],
     notch_wide_freqs: list[float],
     selected_channels: Optional[list[int]],
-) -> Signal32:
+) -> Signal[T]:
     if selected_channels is not None:
         ecog.data = ecog.data[:, selected_channels]  # pyright: ignore
     ecog = scs.decimate(ecog.data, dsamp_coef, axis=0)
