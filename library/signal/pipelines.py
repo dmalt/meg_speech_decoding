@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from functools import partial
-from typing import Optional
+from functools import partial, reduce
+from typing import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -11,12 +11,26 @@ import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
 from ..signal import Signal, T, drop_bad_segments
-from ..type_aliases import Array32
-from . import compose_processors
+from ..type_aliases import SignalArray32
 from .filtering import ButterFiltFilt, moving_avarage, notch_narrow, notch_wide
 from .spectral import logmelspec
 
 log = logging.getLogger(__name__)
+
+SignalProcessor = Callable[[Signal[T]], Signal[T]]
+
+
+def compose_processors(*functions: SignalProcessor) -> SignalProcessor:
+    return reduce(lambda f, g: lambda x: g(f(x)), functions)
+
+
+def log_envelope(signal: Signal[T], highcut: float = 200, lowcut: float = 200) -> Signal[T]:
+    f = compose_processors(
+        ButterFiltFilt(order=3, h_freq=highcut),
+        lambda s: s.update(np.log(np.abs(s))),
+        ButterFiltFilt(5, l_freq=lowcut),
+    )
+    return f(signal)
 
 
 def remove_eyes_artifacts(signal: Signal[T]) -> Signal[T]:
@@ -49,7 +63,7 @@ def preprocess_meg(
 
 def select_channels(signal: Signal[T], selected_channels: list[int] | None) -> Signal[T]:
     if selected_channels is not None:
-        return signal.update(signal.data[:, selected_channels])
+        return signal.update(signal.data[:, selected_channels])  # pyright: ignore
     return signal
 
 
@@ -71,11 +85,11 @@ def remove_silent_noise(sound: Signal[T]) -> npt.NDArray:
 def preprocess_ecog(
     ecog: Signal[T],
     dsamp_coef: int,
-    highpass: Optional[float],
-    lowpass: Optional[float],
+    highpass: float | None,
+    lowpass: float | None,
     notch_narrow_freqs: list[float],
     notch_wide_freqs: list[float],
-    selected_channels: Optional[list[int]],
+    selected_channels: list[int] | None,
 ) -> Signal[T]:
     if selected_channels is not None:
         ecog.data = ecog.data[:, selected_channels]  # pyright: ignore
@@ -91,26 +105,28 @@ def preprocess_ecog(
     return Signal32(skp.scale(ecog).astype("float32"), new_sr)
 
 
-def melspectrogram_pipeline(signal, n_mels, f_max, dsamp_coef):
+def melspectrogram_pipeline(
+    signal: Signal[npt._32Bit], n_mels: int, f_max: float, dsamp_coef: int
+) -> Signal[npt._32Bit]:
     signal.data /= np.max(np.abs(signal.data))
     melspec = logmelspec(signal, n_mels, f_max, dsamp_coef)
     # Converting to float64 before scaling is necessary: otherwise it's not enough
     # precision which results in a warning about numerical error from sklearn
-    melspec_scaled: Array32 = skp.scale(melspec.data.astype(np.float64)).astype(np.float32)
+    melspec_scaled: SignalArray32 = skp.scale(melspec.data.astype(np.float64)).astype(np.float32)
     if melspec_scaled.ndim == 1:
         melspec_scaled = melspec_scaled[:, np.newaxis]
-    return melspec_scaled, melspec.sr
+    return Signal(melspec_scaled, melspec.sr)
 
 
-def align_samples(sig_from: Signal, sig_to: Signal) -> Signal:
+def align_samples(sig_from: Signal[T], sig_to: Signal[T]) -> Signal[T]:
     log.info("Aligning samples")
     log.info(f"{sig_from=}")
     log.info(f"{sig_to=}")
     if len(sig_from) == len(sig_to) and sig_from.sr == sig_from.sr:
-        return Signal32(sig_to.data.astype("float32"), sig_to.sr)
+        return sig_to
     samp_from = np.arange(len(sig_from))
     interp_params = dict(bounds_error=False, fill_value="extrapolate", axis=0)
     itp = sci.interp1d(samp_from, sig_from.data, **interp_params)
     samp_to = (np.arange(len(sig_to)) * (sig_from.sr / sig_to.sr)).astype(int)
     interp = itp(samp_to)
-    return Signal(interp, sig_to.sr)
+    return Signal(interp, sig_to.sr, sig_to.annotations)

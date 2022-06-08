@@ -1,11 +1,8 @@
 import numpy as np
 import pytest
 
-from library.signal import Annotation, Signal, drop_bad_segments, split_into_good_segments
-
-# def test_get_good_slices():
-#     chunks = _get_good_slices([Annotation(10, 5, "BAD"), Annotation(11, 5, "BAD")], sr=1)
-#     assert chunks == [slice(0, 10), slice(16, None)]
+from library.signal import Annotation, Signal
+from library.signal.annotations import drop_bad_segments, split_into_good_segments
 
 
 @pytest.fixture(params=[np.float128, np.float64, np.float32, np.float16])

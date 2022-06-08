@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from library.signal import Annotation, Signal
-from library.signal_processing.filtering import ButterFiltFilt
+from library.signal.filtering import ButterFiltFilt
 
 
 @pytest.fixture(params=[np.float128, np.float64, np.float32, np.float16])

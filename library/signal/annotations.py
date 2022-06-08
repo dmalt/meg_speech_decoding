@@ -1,73 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Generic, List, NamedTuple, Optional, TypeVar
-
 import numpy as np
-import numpy.typing as npt
 
-T = TypeVar("T", bound=npt.NBitBase)
-
-
-class Annotation(NamedTuple):
-    onset: float
-    duration: float
-    type: str
-
-
-Annotations = List[Annotation]
-
-
-@dataclass
-class Signal(Generic[T]):
-    """
-    Timeseries stored as numpy array with sampling rate
-
-    Parameters
-    ----------
-    data : ndarray of shape (n_samples, n_channels)
-        Signal samples
-    sr : float
-        Sampling rate
-    annotations: Annotations
-
-    """
-
-    data: npt.NDArray[np.floating[T]]
-    sr: float
-    annotations: Annotations = field(default_factory=list)
-
-    def __post_init__(self):
-        assert self.data.ndim == 2, f"2-d array is required; got data of shape {self.data.shape}"
-
-    def __len__(self) -> int:
-        """Signal length in samples"""
-        return self.n_samples
-
-    def __array__(self, dtype=None) -> npt.NDArray[np.floating[T]]:
-        if dtype is not None:
-            return self.data.astype(dtype)
-        return self.data
-
-    def __str__(self):
-        dur = self.n_samples / self.sr
-        return f"signal of shape={self.data.shape} sampled at {self.sr} Hz; duration={dur}"
-
-    def update(self, data: npt.NDArray[np.floating[T]]) -> Signal[T]:
-        assert len(data) == len(self), f"Can only update with equal length data; got {len(data)=}"
-        return self.__class__(data, self.sr, self.annotations)
-
-    @property
-    def n_samples(self) -> int:
-        return self.data.shape[0]
-
-    @property
-    def n_channels(self) -> int:
-        return self.data.shape[1]
-
-    @property
-    def dtype(self) -> np.dtype:
-        return self.data.dtype
+from . import Annotation, Annotations, Signal, T
 
 
 def split_into_good_segments(signal: Signal[T], round_annot_times: bool = True) -> list[Signal[T]]:
@@ -99,7 +34,6 @@ def split_into_good_segments(signal: Signal[T], round_annot_times: bool = True) 
 
 def drop_bad_segments(signal: Signal[T], round_annot_times: bool = True) -> Signal[T]:
     normalized_annots = _AnnotationsOverlapProcessor(signal.annotations).normalize_bad_segments()
-    # good_slices = _get_good_slices(signal.annotations)
     removed_dur = 0.0
     new_annots: Annotations = []
     good_segments_mask = np.ones(len(signal), dtype=bool)
@@ -134,7 +68,7 @@ class _AnnotationsOverlapProcessor:
         self.bad_overlap_cnt = 0
         self.res: Annotations = []
         self.open_segments: dict[Annotation, float] = {}
-        self.bad_start: Optional[float] = None
+        self.bad_start: float | None = None
         self._process_all()
         if round_annot_times:
             self._round_results()
@@ -172,7 +106,7 @@ class _AnnotationsOverlapProcessor:
                 self._change_tracked_segments_onset(new_onset=ev_onset)
                 assert self.bad_start is not None
                 self.res.append(Annotation(self.bad_start, ev_onset - self.bad_start, "BAD"))
-        else:  # end and good
+        else:  # good segment end
             self._stop_tracking_good_segment(ev_onset, ev_annotation)
 
     def _start_tracking_good_segment(self, annotation):

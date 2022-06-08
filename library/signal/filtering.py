@@ -4,9 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.signal as scs  # type: ignore
 
-from ..signal import Signal, T
-from ..type_aliases import SignalArray
-from . import compose_processors
+from . import Signal, SignalArray, T
 
 
 class ButterFiltFilt:
@@ -50,15 +48,6 @@ def moving_avarage(signal: Signal, window: int) -> Signal:
     pad_cumsum = np.cumsum(padded)
     data = (pad_cumsum[w2 * 2 :] - pad_cumsum[: -w2 * 2]) / window  # pyright: ignore
     return Signal(data, signal.sr)
-
-
-def log_envelope(signal: Signal[T], highcut: float = 200, lowcut: float = 200) -> Signal[T]:
-    f = compose_processors(
-        ButterFiltFilt(order=3, h_freq=highcut),
-        lambda s: s.update(np.log(np.abs(s))),
-        ButterFiltFilt(5, l_freq=lowcut),
-    )
-    return f(signal)
 
 
 def hilbert_envelope(signal: Signal[T]) -> Signal[T]:
