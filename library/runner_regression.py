@@ -4,25 +4,30 @@ import json
 import logging
 from dataclasses import dataclass
 
-import numpy as np  # type: ignore
-import torch  # type: ignore
-import torch.nn as nn  # type: ignore
-from torch.utils.data import DataLoader  # type: ignore
-from tqdm import trange  # type: ignore
+import numpy as np
+import numpy.typing as npt
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader
+from tqdm import trange
 
 from .bench_models_regression import BenchModelRegressionBase
-from .datasets import Continuous
 from .runner_common import get_random_predictions, infinite
+from .torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
 
 
+def detect_voice(
+    y_batch: npt.NDArray[np.floating[npt.NBitBase]], thresh: float = 1
+) -> npt.NDArray[np.bool_]:
+    n_channels = y_batch.shape[1]
+    return np.sum(y_batch > thresh, axis=1) > int(n_channels * 0.25)
+
+
 def corr_multiple(x, y):
     assert x.shape[1] == y.shape[1], f"{x.shape=}, {y.shape=}"
-    return [
-        np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1]
-        for i in range(x.shape[1])
-    ]
+    return [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
 
 
 def train_batch(bench_model, x_batch, y_batch):
@@ -46,15 +51,7 @@ def test_batch(bench_model, x_batch, y_batch):
     return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
 
 
-def update_metrics(
-    bench_model,
-    y_predicted,
-    y_batch,
-    loss,
-    iteration,
-    is_train,
-    speech_idx=None,
-):
+def update_metrics(bench_model, y_predicted, y_batch, loss, iteration, is_train, speech_idx=None):
     y_batch = y_batch.cpu().detach().numpy()
 
     metrics = {}
@@ -63,9 +60,7 @@ def update_metrics(
 
     if speech_idx is not None:
         y_predicted, y_batch = y_predicted[speech_idx], y_batch[speech_idx]
-        metrics["correlation_speech"] = float(
-            np.nanmean(corr_multiple(y_predicted, y_batch))
-        )
+        metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_batch)))
 
     for key, value in metrics.items():
         bench_model.logger.add_value(key, is_train, value, iteration)
@@ -74,49 +69,33 @@ def update_metrics(
 
 
 # TODO: change dataset type
-def run_regression(bench_model, dataset: Continuous, cfg, detect_voice):
+def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> None:
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
     test_generator = infinite(DataLoader(test, batch_size=bs, shuffle=True))
     val_generator = infinite(DataLoader(test, batch_size=bs, shuffle=True))
 
-    max_steps = cfg.max_iterations_count if not cfg.debug else 1_000
+    max_steps = cfg.max_iterations_count if not debug else 1_000
 
     model_filename = f"{bench_model.__class__.__name__}"
     model_path = f"model_dumps/{model_filename}.pth"
-    tracker = BestModelTracker(
-        bench_model, max_steps, cfg.upd_evry_n_steps, cfg.metric_iter
-    )
-    model_saver = BestModelSaver(
-        bench_model, model_path, tracker, cfg.early_stop_steps
-    )
+    tracker = BestModelTracker(bench_model, max_steps, cfg.upd_evry_n_steps, cfg.metric_iter)
+    model_saver = ModelSaver(bench_model, model_path, tracker, cfg.early_stop_steps)
 
     for i in trange(max_steps):
         x_train, y_train = next(train_generator)
         y_predicted, loss = train_batch(bench_model, x_train, y_train)
         speech_idx = detect_voice(y_train.detach().numpy())
         update_metrics(
-            bench_model,
-            y_predicted,
-            y_train,
-            loss,
-            i,
-            is_train=True,
-            speech_idx=speech_idx,
+            bench_model, y_predicted, y_train, loss, i, is_train=True, speech_idx=speech_idx
         )
 
         x_test, y_test = next(test_generator)
         speech_idx = detect_voice(y_test.detach().numpy())
         y_predicted, loss = test_batch(bench_model, x_test, y_test)
         update_metrics(
-            bench_model,
-            y_predicted,
-            y_test,
-            loss,
-            i,
-            is_train=False,
-            speech_idx=speech_idx,
+            bench_model, y_predicted, y_test, loss, i, is_train=False, speech_idx=speech_idx
         )
         try:
             model_saver.update(i)
@@ -125,11 +104,7 @@ def run_regression(bench_model, dataset: Continuous, cfg, detect_voice):
             break
 
     save_path = f"results/{model_filename}.json"
-    generators = {
-        "train": train_generator,
-        "test": test_generator,
-        "val": val_generator,  # TODO: remove val
-    }
+    generators = {"train": train_generator, "test": test_generator, "val": val_generator}
     model_saver.save_results(save_path, generators, i)
 
 
@@ -138,7 +113,7 @@ class ModelIsStuckException(Exception):
 
 
 @dataclass
-class BestModelSaver:
+class ModelSaver:
     model: BenchModelRegressionBase
     model_path: str
     tracker: BestModelTracker

@@ -18,7 +18,7 @@ TDataset = TypeVar("TDataset", bound="Continuous")
 
 
 @dataclass
-class Continuous(Dataset):
+class Continuous(Dataset[tuple[SignalArray32_T, ChannelsVector32]]):
     """
     Parameters
     ----------
@@ -35,6 +35,11 @@ class Continuous(Dataset):
     Y: SignalArray[npt._32Bit]
     lag_backward: int
     lag_forward: int
+
+    def __post_init__(self) -> None:
+        assert self.X.dtype == np.float32
+        assert self.Y.dtype == np.float32
+        assert len(self.X) == len(self.Y)
 
     def __len__(self) -> int:
         return len(self.X) - self.lag_backward - self.lag_forward
@@ -54,7 +59,7 @@ class Continuous(Dataset):
 
 
 @dataclass
-class Composite(Dataset):
+class Composite(Dataset[tuple[SignalArray32_T, ChannelsVector32]]):
     sampling_rate: float
     datasets: Sequence[Continuous]
 

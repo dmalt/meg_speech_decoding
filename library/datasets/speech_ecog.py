@@ -9,14 +9,14 @@ import numpy as np
 
 from ..datasets import Continuous
 from ..signal_processing import align_samples
-from ..type_aliases import SignalArray, VoiceDetector
+from ..type_aliases import Signal, VoiceDetector
 from . import Lags, Transformers
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
-class PatientConfig:
+class SubjectConfig:
     sampling_rate: float
     files_list: list[str]
     ecog_channels: list[int]
@@ -31,7 +31,7 @@ class Info:
 ContinuousDatasetPackage = Tuple[Continuous, VoiceDetector, Info]
 
 
-def read(patient: PatientConfig, lags: Lags, t: Transformers) -> ContinuousDatasetPackage:
+def read(patient: SubjectConfig, lags: Lags, t: Transformers) -> ContinuousDatasetPackage:
     """Generate Continuous instance for ecog"""
     Xs, Ys = [], []
     sr = patient.sampling_rate
@@ -52,7 +52,7 @@ def read(patient: PatientConfig, lags: Lags, t: Transformers) -> ContinuousDatas
     return Continuous(X, Y, lags.backward, lags.forward, new_sr), detect_voice, info
 
 
-def _read(h5_path: str, ecog_chs: list[int], sound_ch: int) -> tuple[SignalArray, SignalArray]:
+def _read(h5_path: str, ecog_chs: list[int], sound_ch: int) -> tuple[Signal, Signal]:
     """Read ecog and audio signal from h5 file"""
     with h5py.File(h5_path, "r+") as input_file:
         data = input_file["RawData"]["Samples"][()]

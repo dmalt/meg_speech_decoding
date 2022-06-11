@@ -1,4 +1,4 @@
-from typing import Generator, Iterable
+from typing import Generator, Iterable, TypeVar
 
 import numpy as np  # type: ignore
 import torch  # type: ignore
@@ -65,10 +65,11 @@ def get_random_predictions(model, generator, iterations):
     return Y_batch, Y_predicted
 
 
-def infinite(x: Iterable) -> Generator:
+T = TypeVar("T", covariant=True)
+
+
+def infinite(x: Iterable[T]) -> Generator[T, None, None]:
     while True:
         iterator = iter(x)
         for item in iterator:
             yield item
-
-

@@ -9,7 +9,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.signal as scs  # type: ignore
 
-from ..type_aliases import Signal
+from . import Signal, Signal1D, T
 
 log = logging.getLogger(__name__)
 
@@ -51,9 +51,16 @@ def mfccs(signal: Signal, d: int, out_nsamp: int, n_mfcc: int) -> npt.NDArray:
     return mfccs_resampled
 
 
-def logmelspec(signal: Signal, n: int, f_max: float, d: int) -> Signal:
-    melspec = lbf.melspectrogram(y=signal, sr=int(signal.sr), n_mels=n, fmax=f_max, hop_length=d)
-    return Signal(lb.power_to_db(melspec, ref=np.max).T, signal.sr / d)  # pyright: ignore
+def logmelspec(signal: Signal1D[T], n: int, f_max: float, d: int) -> Signal[T]:
+    melspec = lbf.melspectrogram(
+        y=np.squeeze(np.asarray(signal)), sr=int(signal.sr), n_mels=n, fmax=f_max, hop_length=d
+    )
+    log.debug(f"{melspec.shape=}")
+    return Signal(
+        lb.power_to_db(melspec, ref=np.max).astype(signal.dtype).T,
+        signal.sr / d,
+        signal.annotations,
+    )  # pyright: ignore  # noqa
 
 
 # def classic_lpc_pipeline(sound, sampling_rate, downsampling_coef, ecog_size, order):

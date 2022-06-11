@@ -1,23 +1,24 @@
-import torch  # type: ignore
+import torch
 from torch.utils.tensorboard import SummaryWriter  # type: ignore
 
 from .loggers import LearningLogStorer
 
 
 class BenchModelRegressionBase:
-    def __init__(self, model, learning_rate):
+    def __init__(self, model, learning_rate: float):
         # self.input_size = len(self.selected_channels)
         self.model = model
+        self.learning_rate = learning_rate
         if torch.cuda.is_available():
             self.model = self.model.cuda()
-        self.create_optimizer(learning_rate)
+        self.create_optimizer()
         self.create_logger()
 
-    def create_logger(self):
+    def create_logger(self) -> None:
         self.logger = LearningLogStorer(SummaryWriter(comment=f"{str(self.__class__.__name__)}"))
 
-    def create_optimizer(self, learning_rate):
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+    def create_optimizer(self) -> None:
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
 
 # class SimpleNetBase(BenchModelRegressionBase):
@@ -48,10 +49,10 @@ class BenchModelRegressionBase:
 
 # class SimpleNetLpcsBase(SimpleNetBase):
 #     def preprocess_sound(self, sound, sampling_rate, ecog_size):
-#         assert self.patient["sampling_rate"] == sampling_rate
+#         assert self.subject["sampling_rate"] == sampling_rate
 #         return transformers.classic_lpc_pipeline(
 #             sound,
-#             self.patient["sampling_rate"],
+#             self.subject["sampling_rate"],
 #             self.downsampling_coef,
 #             ecog_size,
 #             self.N_LPCS,
@@ -86,10 +87,10 @@ class BenchModelRegressionBase:
 
 # class SimpleNetMfccsBase(SimpleNetBase):
 #     def preprocess_sound(self, sound, sampling_rate, ecog_size):
-#         assert self.patient["sampling_rate"] == sampling_rate
+#         assert self.subject["sampling_rate"] == sampling_rate
 #         return transformers.classic_mfcc_pipeline(
 #             sound,
-#             self.patient["sampling_rate"],
+#             self.subject["sampling_rate"],
 #             self.downsampling_coef,
 #             ecog_size,
 #             self.N_MFCC,

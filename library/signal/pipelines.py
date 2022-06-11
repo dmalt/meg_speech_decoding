@@ -10,17 +10,18 @@ import scipy.interpolate as sci  # type: ignore
 import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
-from ..signal import Signal, T, drop_bad_segments
-from ..type_aliases import SignalArray32
+from . import Signal, Signal1D, T
+from .annotations import drop_bad_segments
 from .filtering import ButterFiltFilt, moving_avarage, notch_narrow, notch_wide
 from .spectral import logmelspec
 
 log = logging.getLogger(__name__)
 
 SignalProcessor = Callable[[Signal[T]], Signal[T]]
+Signal1DProcessor = Callable[[Signal1D[T]], Signal[T]]
 
 
-def compose_processors(*functions: SignalProcessor) -> SignalProcessor:
+def compose_processors(*functions: SignalProcessor[T]) -> SignalProcessor[T]:
     return reduce(lambda f, g: lambda x: g(f(x)), functions)
 
 
@@ -96,17 +97,17 @@ def preprocess_ecog(
     ecog = scs.decimate(ecog.data, dsamp_coef, axis=0)
     new_sr = int(ecog.sr / dsamp_coef)
 
-    ecog = as_float32(filter(ecog, highpass, lowpass, order=5))
+    ecog = (filter(ecog, highpass, lowpass, order=5))
     for p in notch_narrow_freqs:
-        ecog = as_float32(notch_narrow(ecog, p))
+        ecog = (notch_narrow(ecog, p))
     for p in notch_wide_freqs:
-        ecog = as_float32(notch_wide(ecog, p))
+        ecog = (notch_wide(ecog, p))
 
-    return Signal32(skp.scale(ecog).astype("float32"), new_sr)
+    return Signal(skp.scale(ecog).astype("float32"), new_sr)
 
 
 def melspectrogram_pipeline(
-    signal: Signal[npt._32Bit], n_mels: int, f_max: float, dsamp_coef: int
+    signal: Signal1D[npt._32Bit], n_mels: int, f_max: float, dsamp_coef: int
 ) -> Signal[npt._32Bit]:
     signal.data /= np.max(np.abs(signal.data))
     melspec = logmelspec(signal, n_mels, f_max, dsamp_coef)
@@ -123,13 +124,14 @@ def melspectrogram_pipeline(
 
 def align_samples(sig_from: Signal[T], sig_to: Signal[T]) -> Signal[T]:
     log.info("Aligning samples")
-    log.info(f"{sig_from=}")
-    log.info(f"{sig_to=}")
+    log.info(f"{str(sig_from)=}")
+    log.info(f"{str(sig_to)=}")
+    assert abs(sig_from.duration - sig_to.duration) < 0.01
     if len(sig_from) == len(sig_to) and sig_from.sr == sig_from.sr:
         return sig_to
     samp_from = np.arange(len(sig_from))
     interp_params = dict(bounds_error=False, fill_value="extrapolate", axis=0)
     itp = sci.interp1d(samp_from, sig_from.data, **interp_params)
     samp_to = (np.arange(len(sig_to)) * (sig_from.sr / sig_to.sr)).astype(int)
-    interp = itp(samp_to)
-    return Signal(interp, sig_to.sr, sig_to.annotations)
+    interp = itp(samp_to).astype(sig_to.dtype)
+    return Signal(interp, sig_to.sr, sig_from.annotations)

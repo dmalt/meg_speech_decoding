@@ -1,46 +1,46 @@
-import numpy as np  # type: ignore
-import torch  # type: ignore
-import torch.nn as nn  # type: ignore
+from dataclasses import dataclass
+from typing import Any
 
-from .type_aliases import Array
+import numpy as np
+import numpy.typing as npt
+import torch
+import torch.nn as nn
+
+
+@dataclass
+class SimpleNetConfig:
+    in_channels: int
+    out_channels: int
+    lag_backward: int
+    lag_forward: int
+    use_lstm: bool
+    downsampling: int
+    hidden_channels: int
+    filtering_size: int
+    envelope_size: int
+    fc_hidden_features: int
 
 
 class SimpleNet(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        lag_backward: int,
-        lag_forward: int,
-        use_lstm: bool,
-        downsampling: int,
-        hidden_channels: int,
-        filtering_size: int,
-        envelope_size: int,
-        fc_hidden_features: int,
-    ):
+    def __init__(self, cfg: SimpleNetConfig):
         super(self.__class__, self).__init__()
-        assert filtering_size % 2 == 1, "conv weights must be odd"
-        assert envelope_size % 2 == 1, "envelope size must be odd"
-        assert hidden_channels % 2 == 0, "hidden channels number must be even"
-        self.downsampling = downsampling
-        self.filtering_size = filtering_size
-        self.envelope_size = envelope_size
-        self.hidden_channels = hidden_channels
+        assert cfg.filtering_size % 2 == 1, "conv weights must be odd"
+        assert cfg.envelope_size % 2 == 1, "envelope size must be odd"
+        assert cfg.hidden_channels % 2 == 0, "hidden channels number must be even"
+        self.cfg = cfg
 
-        window_size = lag_backward + lag_forward + 1
-        final_out_features = (window_size // self.downsampling + 1) * self.hidden_channels
-        self.use_lstm = use_lstm
+        window_size = cfg.lag_backward + cfg.lag_forward + 1
+        final_out_features = (window_size // cfg.downsampling + 1) * cfg.hidden_channels
 
-        assert window_size > filtering_size
-        assert window_size > envelope_size
+        assert window_size > cfg.filtering_size
+        assert window_size > cfg.envelope_size
 
-        self.unmixing_layer = nn.Conv1d(in_channels, self.hidden_channels, 1)
-        self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(self.hidden_channels, affine=False)
-        self.detector = self._create_envelope_detector(self.hidden_channels)
+        self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, 1)
+        self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(cfg.hidden_channels, affine=False)
+        self.detector = self._create_envelope_detector(cfg.hidden_channels)
         self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
-        if self.use_lstm:
-            hc = self.hidden_channels
+        if cfg.use_lstm:
+            hc = cfg.hidden_channels
             self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
 
         # self.fc_layer = nn.Sequential(
@@ -53,15 +53,15 @@ class SimpleNet(nn.Module):
         #             nn.ReLU(),
         #             nn.Linear(fc_hidden_features, out_channels),
         # )
-        self.fc_layer = nn.Linear(final_out_features, out_channels)
+        self.fc_layer = nn.Linear(final_out_features, cfg.out_channels)
 
     def _create_envelope_detector(self, nch: int) -> nn.Sequential:
         # 1. Learn band pass flter
         # 2. Centering signals
         # 3. Abs
         # 4. low pass to get envelope
-        kern_conv, kern_env = self.filtering_size, self.envelope_size
-        pad_conv, pad_env = int(self.filtering_size / 2), int(self.envelope_size / 2)
+        kern_conv, kern_env = self.cfg.filtering_size, self.cfg.envelope_size
+        pad_conv, pad_env = int(self.cfg.filtering_size / 2), int(self.cfg.envelope_size / 2)
         return nn.Sequential(
             nn.Conv1d(nch, nch, kernel_size=kern_conv, bias=False, groups=nch, padding=pad_conv),
             nn.BatchNorm1d(nch, affine=False),
@@ -71,22 +71,22 @@ class SimpleNet(nn.Module):
             nn.Conv1d(nch, nch, kernel_size=kern_env, groups=nch, padding=pad_env),
         )
 
-    def get_conv_filtering_weights(self) -> Array:
+    def get_conv_filtering_weights(self) -> npt.NDArray[Any]:
         conv_params = self.detector[0].cpu().parameters()
         return np.squeeze(list(conv_params)[0].detach().numpy())
 
-    def get_spatial(self) -> Array:
+    def get_spatial(self) -> npt.NDArray[Any]:
         return self.unmixing_layer.weight.cpu().detach().numpy()[:, :, 0].T
 
-    def get_unmixed_batch(self) -> Array:
+    def get_unmixed_batch(self) -> npt.NDArray[Any]:
         return self._unmixed_channels.cpu().detach().numpy()
 
     def forward(self, x):
         self._unmixed_channels = self.unmixing_layer(x)
         unmix_scaled = self.unmixed_channels_batchnorm(self._unmixed_channels)
         detected_envelopes = self.detector(unmix_scaled)
-        features = detected_envelopes[:, :, :: self.downsampling].contiguous()
-        if self.use_lstm:
+        features = detected_envelopes[:, :, :: self.cfg.downsampling].contiguous()
+        if self.cfg.use_lstm:
             features = self.lstm(features.transpose(1, 2))[0].transpose(1, 2)
         features = features.reshape((features.shape[0], -1))
         self.features_scaled = self.features_batchnorm(features)

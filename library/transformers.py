@@ -4,45 +4,28 @@ import logging
 import time
 from dataclasses import asdict, dataclass
 from functools import wraps
-from typing import Callable, Optional
+from typing import Optional
 
-import numpy as np
-import numpy.typing as npt
 from joblib import Memory  # type: ignore
 
-from . import signal_processing as sp
 from .signal import Signal, T
-from .signal_processing import pipelines as spp
-from .type_aliases import Array, Array32, Signal32
+from .signal import pipelines as spp
 
 memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 log = logging.getLogger(__name__)
 
 
-Signal32Transformer = Callable[[Signal32], Signal32]
-
-
-@dataclass
-class AlignedData:
-    """Timeseries data with X and Y of equal length and sampling rate"""
-    X: Signal32
-    Y: Signal32
-
-    def __post_init__(self):
-        assert len(self.X.data) == len(self.Y.data)
-        assert self.X.sr == self.Y.sr
-
-
 @dataclass
 class MegPipeline:
-    highpass: float
-    lowpass: float
+    l_freq: Optional[float]
+    h_freq: Optional[float]
     notch_freqs: list[float]
-    selected_channels: Optional[list[int]] = None
+    selected_channels: Optional[list[int]]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         time_decorator = Timer(type(self).__name__, "Transforming data", log)
         self.transform = memory.cache(time_decorator(spp.preprocess_meg))
+        # self.transform = (time_decorator(spp.preprocess_meg))
 
     def __call__(self, signal: Signal[T]) -> Signal[T]:
         return self.transform(signal, **asdict(self))
@@ -59,14 +42,14 @@ class EcogPipeline:
 
     def __post_init__(self):
         time_decorator = Timer(type(self).__name__, "Transforming data", log)
-        self.transform = memory.cache(time_decorator(sp.preprocess_ecog))
+        self.transform = memory.cache(time_decorator(spp.preprocess_ecog))
 
-    def __call__(self, ecog: Array, sr: float) -> tuple[Array32, float]:
-        return self.transform(ecog, sr, **asdict(self))
+    def __call__(self, ecog: Signal[T]) -> Signal[T]:
+        return self.transform(ecog, **asdict(self))
 
 
 class Timer:
-    def __init__(self, caller, message, logger):
+    def __init__(self, caller, message, logger) -> None:
         self.caller = caller
         self.message = message
         self.logger = logger
@@ -91,11 +74,7 @@ class MelspectrogramPipeline:
 
     def __post_init__(self):
         time_decorator = Timer(type(self).__name__, "Transforming data", log)
-        self.transform = memory.cache(time_decorator(sp.melspectrogram_pipeline))
+        self.transform = memory.cache(time_decorator(spp.melspectrogram_pipeline))
 
-    def __call__(self, signal: Array, sr: float) -> tuple[Array32, float]:
-        return self.transform(signal, sr, self.n_mels, self.f_max, self.dsamp_coef)
-
-    def detect_voice(self, y_batch: Array) -> npt.NDArray[np.bool_]:
-        res: npt.NDArray[np.bool_] = np.sum(y_batch > 1, axis=1) > int(self.n_mels * 0.25)
-        return res
+    def __call__(self, signal: Signal[T]) -> Signal[T]:
+        return self.transform(signal, **asdict(self))
