@@ -115,7 +115,7 @@ def melspectrogram_pipeline(
     melspec_scaled: SignalArray32 = skp.scale(melspec.data.astype(np.float64)).astype(np.float32)
     if melspec_scaled.ndim == 1:
         melspec_scaled = melspec_scaled[:, np.newaxis]
-    return Signal(melspec_scaled, melspec.sr)
+    return Signal(melspec_scaled, melspec.sr, signal.annotations)
 
 
 def align_samples(sig_from: Signal[T], sig_to: Signal[T]) -> Signal[T]:
