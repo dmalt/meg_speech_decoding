@@ -1,21 +1,20 @@
 defaults:
-    - patient: meg_clean
-    - _self_
+  - dataset_schema
+  - subject: meg_clean
+  - _self_
 
-_target_: library.io.speech_meg.read
-lags:
-    backward: ${lag_backward}
-    forward: ${lag_forward}
-t:
-    _target_: library.io.Transformers
-    transform_x:
-        _target_: library.transformers.MegPipeline
-        highpass: None
-        lowpass: None
-        notch_freqs: [50, 100]
-        selected_channels: ${selected_channels}
-    transform_y:
-        _target_: library.transformers.MelspectrogramPipeline
-        dsamp_coef: 22
-        n_mels: ${target_features_cnt}
-        f_max: 2000
+read:
+  _target_: library.datasets.speech_meg.read
+  subject: ${..subject}
+
+transform_x:
+  _target_: library.transformers.MegPipeline
+  l_freq: 10
+  h_freq: 120
+  notch_freqs: [50, 100]
+  selected_channels: ${selected_channels}
+transform_y:
+  _target_: library.transformers.MelspectrogramPipeline
+  dsamp_coef: 22
+  n_mels: ${target_features_cnt}
+  f_max: 2000

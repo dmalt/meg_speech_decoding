@@ -1,33 +1,22 @@
 defaults:
-    - dataset: simulated
-    - _self_
+  - config_schema
+  - dataset: meg
+  - model: simple_no_lstm
+  - _self_
 
-lag_backward: 100       # number of samples before the target sound sample
-lag_forward: 100        # number of samples after the target sound sample
-target_features_cnt: 1  # e.g. n_mels for melspectrogram
-selected_channels: ${python_range:"range(5)"}
-run_tensorboard: True
+lag_backward: 1000       # number of samples before the target sound sample
+lag_forward: 0        # number of samples after the target sound sample
+target_features_cnt: 20  # e.g. n_mels for melspectrogram
+selected_channels: ${python_range:"range(0, 306, 3)"}
+run_tensorboard: true
+debug: false
 
-runner:
-    runs_count: 1       # not used
-    debug: False
-    batch_size: 500
-    max_iterations_count: 8000
-    metric_iter: 250
-    early_stop_steps: 20000
-    upd_evry_n_steps: 250
-    train_test_ratio: 0.6
-model:
-    learning_rate: 0.001
-    regression:
-        _target_: library.models_regression.SimpleNet
-        in_channels: ${len:${selected_channels}}
-        out_channels: ${target_features_cnt}
-        lag_backward: ${lag_backward}
-        lag_forward: ${lag_forward}
-        use_lstm: False
-        downsampling: 10             # downsampling coefficient for envelopes
-        hidden_channels: 4           # must be even
-        filtering_size: 101          # in samples
-        envelope_size: 101           # in samples
-        fc_hidden_features: 100      # not used
+train_runner:
+  runs_count: 1       # not used
+  batch_size: 100
+  max_iterations_count: 8000
+  metric_iter: 250
+  early_stop_steps: 20000
+  upd_evry_n_steps: 250
+  train_test_ratio: 0.6
+  learning_rate: 0.0003
