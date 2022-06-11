@@ -110,9 +110,12 @@ def melspectrogram_pipeline(
 ) -> Signal[npt._32Bit]:
     signal.data /= np.max(np.abs(signal.data))
     melspec = logmelspec(signal, n_mels, f_max, dsamp_coef)
+    melspec = drop_bad_segments(melspec)
+    log.debug(f"{melspec.data.shape=}")
     # Converting to float64 before scaling is necessary: otherwise it's not enough
     # precision which results in a warning about numerical error from sklearn
-    melspec_scaled: SignalArray32 = skp.scale(melspec.data.astype(np.float64)).astype(np.float32)
+    melspec_scaled = skp.scale(melspec.data.astype(np.float64)).astype(np.float32)
+    log.debug(f"{melspec_scaled.data.shape=}")
     if melspec_scaled.ndim == 1:
         melspec_scaled = melspec_scaled[:, np.newaxis]
     return Signal(melspec_scaled, melspec.sr, signal.annotations)
