@@ -6,16 +6,17 @@ from time import perf_counter
 import hydra
 import numpy as np
 import numpy.typing as npt
-import setup_utils
 from hydra.utils import call, instantiate
 from joblib import Memory  # type: ignore
+from ndp.signal import Signal, Signal1D
+from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
+from omegaconf import OmegaConf
+
+import setup_utils
 from library.bench_models_regression import BenchModelRegressionBase
 from library.models_regression import SimpleNet
 from library.runner_regression import run_regression
 from library.torch_datasets import Continuous
-from ndp.signal import Signal, Signal1D
-from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
-from omegaconf import OmegaConf
 
 log = logging.getLogger(__name__)
 
@@ -26,8 +27,6 @@ memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 @hydra.main(config_path="./configs", config_name="config")
 def main(cfg: setup_utils.Config) -> None:
     log.debug(f"{os.getcwd()=}")
-    if cfg.run_tensorboard:
-        setup_utils.run_tensorboard("runs")
     if cfg.debug:
         setup_utils.set_debug_level()
         OmegaConf.resolve(cfg)  # type: ignore

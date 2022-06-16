@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from hydra.core.config_store import ConfigStore
-from library.models_regression import SimpleNetConfig
 from ndp.datasets.speech_meg import Subject
 from omegaconf import ListConfig, OmegaConf
+
+from library.models_regression import SimpleNetConfig
 
 
 @dataclass
@@ -41,7 +42,6 @@ class Config:
     lag_forward: int
     target_features_cnt: int
     selected_channels: list[int]
-    run_tensorboard: bool
     train_runner: TrainRunnerConfig
     model: SimpleNetConfig
     dataset: DatasetConfig
@@ -59,16 +59,3 @@ def setup_hydra() -> None:
 def set_debug_level() -> None:
     for logger_name in logging.root.manager.loggerDict:
         logging.getLogger(logger_name).setLevel(logging.DEBUG)
-
-
-def run_tensorboard(logdir: str) -> None:
-    """Modified from https://stackoverflow.com/a/61960273"""
-    import os
-    import sys
-    import threading
-
-    venv_dir = os.path.dirname(sys.executable)
-    tb_thread = threading.Thread(
-        target=lambda: os.system(f"{venv_dir}/tensorboard --logdir={logdir}"), daemon=True
-    )
-    tb_thread.start()
