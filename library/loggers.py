@@ -5,9 +5,7 @@ class LearningLogStorerBase:
     def add_value(self, name, is_train, value, iteration):
         train_or_test = "train" if is_train else "test"
         if self.tensorboard_writer is not None:
-            self.tensorboard_writer.add_scalar(
-                f"{train_or_test}/{name}", value, iteration
-            )
+            self.tensorboard_writer.add_scalar(f"{train_or_test}/{name}", value, iteration)
         if is_train:
             self.train_logs[name].append((iteration, value))
         else:
@@ -15,9 +13,7 @@ class LearningLogStorerBase:
         return
 
     def get_smoothed_value(self, name, window=100):
-        return np.mean(
-            [value for iteration, value in self.test_logs[name][-window:]]
-        )
+        return np.mean([value for iteration, value in self.test_logs[name][-window:]])
 
 
 class LearningLogStorer(LearningLogStorerBase):
