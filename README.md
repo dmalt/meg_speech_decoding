@@ -1,12 +1,21 @@
 Installation
 ------------
-Setup conda virtual env following the instructions [here](https://github.com/dmalt/speech_decoding_setup)
+Setup conda virtual env with
+
+```bash
+conda env create -f environment_freeze.yml
+```
+
+Activate the environment with
+```bash
+conda activate speechdl3.9
+```
 
 Launch
 ------
 First, activate the environment with
 ```
-conda activate speech3.8
+conda activate speechdl3.9
 ```
 
 Training is launched via `main.py`'s CLI interface, which is provided by [hydra](https://hydra.cc/), e.g.
@@ -41,4 +50,3 @@ Ecog data can be downloaded from GDrive with
 
 Files are automatically saved under `$HOME/Data/speech_dl/Procenko`.
 Make sure to change the configuration for launch
-
