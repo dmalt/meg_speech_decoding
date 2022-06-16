@@ -1,0 +1,24 @@
+name: speechdl3.9
+channels:
+  - pytorch
+  - conda-forge
+dependencies:
+  - python==3.9
+  - pytorch::cpuonly
+  - pytorch::pytorch>=1.11.0
+  - librosa
+  - mne-base
+  - scipy
+  - numpy>=1.22
+  - matplotlib
+  - scikit-learn
+  - tensorboard
+  - h5py
+  - tqdm
+  - hydra-core
+  # dev deps
+  - ipython
+  - mypy
+  - pytest
+variables:
+    MEG_DATA: "/home/altukhov/Data/speech/rawdata/derivatives/"

@@ -24,7 +24,7 @@ setup_utils.setup_hydra()
 memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 
 
-@hydra.main(version_base=None, config_path="./configs", config_name="config")
+@hydra.main(config_path="./configs", config_name="config")
 def main(cfg: setup_utils.Config) -> None:
     log.debug(f"{os.getcwd()=}")
     if cfg.run_tensorboard:
