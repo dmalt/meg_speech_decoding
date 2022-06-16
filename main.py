@@ -8,7 +8,6 @@ import hydra
 import numpy as np
 import numpy.typing as npt
 from hydra.utils import call, instantiate
-from joblib import Memory  # type: ignore
 from ndp.signal import Signal, Signal1D
 from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
 from omegaconf import OmegaConf
@@ -22,7 +21,6 @@ from library.torch_datasets import Continuous
 log = logging.getLogger(__name__)
 
 hydra_utils.setup_hydra()
-memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 
 
 @hydra.main(config_path="./configs", config_name="config")
