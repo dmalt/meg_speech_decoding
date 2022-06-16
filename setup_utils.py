@@ -3,10 +3,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from hydra.core.config_store import ConfigStore
-from omegaconf import ListConfig, OmegaConf
-
-from library.datasets.speech_meg import Subject
 from library.models_regression import SimpleNetConfig
+from ndp.datasets.speech_meg import Subject
+from omegaconf import ListConfig, OmegaConf
 
 
 @dataclass

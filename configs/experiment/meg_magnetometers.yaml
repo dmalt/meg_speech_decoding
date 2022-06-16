@@ -18,7 +18,7 @@ model:
     filtering_size: 25
     envelope_size: 15
 dataset:
-    _target_: library.io.speech_meg.read_chunks
+    _target_: ndp.datasets.speech_meg.read_chunks
     # _target_: library.datasets.MegDataset.from_config
     lags:
         backward: ${lag_backward}

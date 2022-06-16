@@ -7,9 +7,9 @@ from typing import Callable, Sequence, TypeVar
 import numpy as np
 import numpy.typing as npt
 import scipy.signal as scs  # type: ignore
+from ndp.signal import Signal, SignalArray
 from torch.utils.data import Dataset
 
-from .signal import Signal, SignalArray
 from .type_aliases import ChannelsVector32, SignalArray32_T
 
 log = logging.getLogger(__name__)

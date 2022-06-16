@@ -2,7 +2,7 @@ defaults:
     - patient: simulated
     - _self_
 
-_target_: library.datasets.SimulatedDataset.from_config
+_target_: ndp.datasets.SimulatedDataset.from_config
 transform:
     _target_: library.transformers.Scaler
 target_transform:

@@ -7,12 +7,12 @@ import numpy as np
 import scipy.signal as scs  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 import torch
+from ndp.signal.spectral import asd
 from torch.autograd import Variable
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm  # type: ignore
 
 from .datasets import InterpretableDataset
-from .signal_processing import SpectralFeatures
 from .type_aliases import Array
 
 
@@ -74,7 +74,7 @@ class ModelInterpreter:
         spec_patterns = []
         for i_u, i_f in product(range(unmixed_ch_cnt), range(filt_per_ch)):
             w = conv_weights[i_u * filt_per_ch + i_f, :]
-            freqs, sw = SpectralFeatures(w, sr).asd(nperseg)
+            freqs, sw = (w, sr).asd(nperseg)
             sw = skp.minmax_scale(sw)
             x = X[:, i_u]
             _, x_psd = scs.welch(x, sr, nperseg=nperseg, detrend="linear")

@@ -4,7 +4,7 @@ defaults:
   - _self_
 
 read:
-  _target_: library.datasets.speech_meg.read
+  _target_: ndp.datasets.speech_meg.read
   subject: ${..subject}
 
 transform_x:

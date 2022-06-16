@@ -7,9 +7,8 @@ from functools import wraps
 from typing import Optional
 
 from joblib import Memory  # type: ignore
-
-from .signal import Signal, T
-from .signal import pipelines as spp
+from ndp.signal import Signal, T
+from ndp.signal import pipelines as spp
 
 memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 log = logging.getLogger(__name__)

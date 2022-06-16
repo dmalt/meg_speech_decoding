@@ -1,12 +1,10 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt  # type: ignore
+import setup_utils  # type: ignore # noqa
 import torch  # type: ignore
 from hydra import compose, initialize  # type: ignore
 from hydra.utils import instantiate  # type: ignore
-
-import setup_utils  # type: ignore # noqa
-from library.datasets import CompositeDataset, ContinuousDataset
 from library.interpreter import ModelInterpreter
 from library.visualize import (
     ContinuousDatasetPlotter,
@@ -15,6 +13,7 @@ from library.visualize import (
     plot_spatial_as_line,
     plot_temporal_as_line,
 )
+from ndp.datasets import CompositeDataset, ContinuousDataset
 
 setup_utils.setup_hydra()
 
