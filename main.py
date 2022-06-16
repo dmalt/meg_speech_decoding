@@ -1,6 +1,7 @@
 import logging
 import os
 import os.path
+import sys
 from time import perf_counter
 
 import hydra
@@ -12,7 +13,7 @@ from ndp.signal import Signal, Signal1D
 from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
 from omegaconf import OmegaConf
 
-import setup_utils
+from library import git_utils, hydra_utils
 from library.bench_models_regression import BenchModelRegressionBase
 from library.models_regression import SimpleNet
 from library.runner_regression import run_regression
@@ -20,17 +21,28 @@ from library.torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
 
-setup_utils.setup_hydra()
+hydra_utils.setup_hydra()
 memory = Memory("/home/altukhov/Data/speech/cachedir", verbose=0)
 
 
 @hydra.main(config_path="./configs", config_name="config")
-def main(cfg: setup_utils.Config) -> None:
+def main(cfg: hydra_utils.Config) -> None:
     log.debug(f"{os.getcwd()=}")
     if cfg.debug:
-        setup_utils.set_debug_level()
+        hydra_utils.set_debug_level()
         OmegaConf.resolve(cfg)  # type: ignore
         log.debug(OmegaConf.to_yaml(cfg))
+    elif git_utils.is_repo_clean():
+        with open("commit_hash", "w") as f:
+            f.write(git_utils.get_latest_commit_hash())
+    else:
+        log.warning("Git repository is not clean. Continue? (y/n)")
+        while (ans := input("-> ")).lower() not in ("y", "n"):
+            print("Please input 'y' or 'n'")
+        log.info(f"Answer: {ans}")
+        if ans == "n":
+            sys.exit(0)
+
     for dir_name in ["results", "model_dumps"]:
         if not os.path.isdir(dir_name):
             os.makedirs(dir_name)
