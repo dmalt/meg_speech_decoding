@@ -3,6 +3,8 @@ defaults:
   - subject: meg_clean
   - _self_
 
+type: MEG
+
 read:
   _target_: ndp.datasets.speech_meg.read
   subject: ${..subject}

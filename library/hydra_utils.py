@@ -21,6 +21,7 @@ class DatasetConfig:
     read: ReadConfig
     transform_x: Any
     transform_y: Any
+    type: str
 
 
 @dataclass

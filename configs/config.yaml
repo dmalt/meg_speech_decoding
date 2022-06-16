@@ -19,3 +19,7 @@ train_runner:
   upd_evry_n_steps: 250
   train_test_ratio: 0.6
   learning_rate: 0.0003
+
+hydra:
+  run:
+    dir: outputs/debug:${debug}/${dataset.type}/${now:%Y-%m-%d_%H-%M-%S}
