@@ -1,0 +1,10 @@
+  in_channels: ${len:${selected_channels}}
+  out_channels: ${target_features_cnt}
+  lag_backward: ${lag_backward}
+  lag_forward: ${lag_forward}
+  use_lstm: ???
+  downsampling: ???            # downsampling coefficient for envelopes
+  hidden_channels: ???         # must be even
+  filtering_size: ???          # in samples
+  envelope_size: ???           # in samples
+  fc_hidden_features: ???      # not used
