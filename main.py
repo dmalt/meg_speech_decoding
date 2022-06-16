@@ -23,10 +23,17 @@ log = logging.getLogger(__name__)
 hydra_utils.setup_hydra()
 
 
-@hydra.main(config_path="./configs", config_name="config")
-def main(cfg: hydra_utils.Config) -> None:
-    log.debug(f"{os.getcwd()=}")
-    if cfg.debug:
+def prompt_proceeding_with_dirty_repo() -> None:
+    log.warning("Git repository is not clean. Continue? (y/n)")
+    while (ans := input("-> ")).lower() not in ("y", "n"):
+        print("Please input 'y' or 'n'")
+    log.info(f"Answer: {ans}")
+    if ans == "n":
+        sys.exit(0)
+
+
+def handle_debug(debug: bool, cfg: hydra_utils.Config) -> None:
+    if debug:
         hydra_utils.set_debug_level()
         OmegaConf.resolve(cfg)  # type: ignore
         log.debug(OmegaConf.to_yaml(cfg))
@@ -34,18 +41,22 @@ def main(cfg: hydra_utils.Config) -> None:
         with open("commit_hash", "w") as f:
             f.write(git_utils.get_latest_commit_hash())
     else:
-        log.warning("Git repository is not clean. Continue? (y/n)")
-        while (ans := input("-> ")).lower() not in ("y", "n"):
-            print("Please input 'y' or 'n'")
-        log.info(f"Answer: {ans}")
-        if ans == "n":
-            sys.exit(0)
+        prompt_proceeding_with_dirty_repo()
 
+
+def create_dirs() -> None:
     for dir_name in ["results", "model_dumps"]:
         if not os.path.isdir(dir_name):
             os.makedirs(dir_name)
             log.debug(f"{dir_name} dir created")
-    log.debug(f"{os.getcwd()=}")
+
+
+@hydra.main(config_path="./configs", config_name="config")
+def main(cfg: hydra_utils.Config) -> None:
+    log.debug(f"Current working directory is {os.getcwd()}")
+    handle_debug(cfg.debug, cfg)
+    create_dirs()
+
     log.info("Loading data...")
     t1 = perf_counter()
     X: Signal[npt._32Bit]
