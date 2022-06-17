@@ -83,8 +83,17 @@ def main(cfg: hydra_utils.Config) -> None:
 
     model = SimpleNet(cfg.model)
     bench_model = BenchModelRegressionBase(model, cfg.train_runner.learning_rate)
-    run_regression(bench_model, dataset, cfg.train_runner, cfg.debug)
 
+    metrics = run_regression(bench_model, dataset, cfg.train_runner, cfg.debug)
+
+    bench_model.logger.tensorboard_writer.add_hparams(
+        dict(
+            lag_backward=cfg.lag_backward,
+            lag_forward=cfg.lag_forward,
+            target_features_cnt=cfg.target_features_cnt,
+        ),
+        metrics,
+    )
     t4 = perf_counter()
     log.info(f"Model training finished in {t4 - t3:.2f} sec")
     log.info(f"Overall session time: {t4 - t1:.2f} sec")
