@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from tqdm import trange
+from tqdm import trange  # type: ignore
 
 from .bench_models_regression import BenchModelRegressionBase
 from .runner_common import get_random_predictions, infinite
@@ -69,7 +70,7 @@ def update_metrics(bench_model, y_predicted, y_batch, loss, iteration, is_train,
 
 
 # TODO: change dataset type
-def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> None:
+def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> dict[str, float]:
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
@@ -106,6 +107,10 @@ def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> None:
     save_path = f"results/{model_filename}.json"
     generators = {"train": train_generator, "test": test_generator, "val": val_generator}
     model_saver.save_results(save_path, generators, i)
+    return dict(
+        correlation_raw=model_saver.tracker.max_raw,
+        correlation_speech=model_saver.tracker.max_speech,
+    )
 
 
 class ModelIsStuckException(Exception):
@@ -119,10 +124,10 @@ class ModelSaver:
     tracker: BestModelTracker
     early_stop_steps: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.best_iteration = 0
 
-    def update(self, iteration):
+    def update(self, iteration: int) -> None:
         if not self.tracker.should_update(iteration):
             return
         if self.tracker.metrics_improved():
@@ -132,7 +137,7 @@ class ModelSaver:
             msg = self.tracker.stop_message(iteration)
             raise ModelIsStuckException(msg)
 
-    def save_results(self, save_path, generators, iteration):
+    def save_results(self, save_path: str, generators, iteration: int) -> None:
         self.model.model.load_state_dict(torch.load(self.model_path))
         self.model.model.eval()
         result = self.tracker.get_final_metrics(generators, iteration)
@@ -147,7 +152,7 @@ class ModelSaver:
 
 
 class BestModelTracker:
-    def __init__(self, model, max_steps, update_every_n_iter, metric_iter):
+    def __init__(self, model: Any, max_steps: int, update_every_n_iter: int, metric_iter: int):
         self.best_iteration: int = 0
         self.max_raw: float = -float("inf")
         self.max_speech: float = -float("inf")
@@ -156,12 +161,12 @@ class BestModelTracker:
         self.update_every_n_iter = update_every_n_iter
         self.metric_iter = metric_iter
 
-    def metrics_improved(self):
+    def metrics_improved(self) -> bool:
         raw = self.model.logger.get_smoothed_value("correlation")
         speech = self.model.logger.get_smoothed_value("correlation_speech")
         return raw >= self.max_raw or speech >= self.max_speech
 
-    def get_final_metrics(self, generators, iteration):
+    def get_final_metrics(self, generators: dict[str, Any], iteration: int) -> dict[str, Any]:
         result = {}
         for gen_name, gen in generators.items():
             p = get_random_predictions(self.model.model, gen, self.metric_iter)
@@ -171,21 +176,21 @@ class BestModelTracker:
         result["iterations"] = iteration
         return result
 
-    def update_max_metrics(self, iteration):
+    def update_max_metrics(self, iteration: int) -> None:
         raw = self.model.logger.get_smoothed_value("correlation")
         speech = self.model.logger.get_smoothed_value("correlation_speech")
         self.max_raw = max(raw, self.max_raw)
         self.max_speech = max(speech, self.max_speech)
         self.best_iteration = iteration
 
-    def should_update(self, iteration):
+    def should_update(self, iteration: int) -> bool:
         if iteration == self.max_steps - 1:
             return True
         if iteration % self.update_every_n_iter:
             return False
         return True
 
-    def stop_message(self, iteration, m_smooth_raw, m_smooth_speech):
+    def stop_message(self, iteration: int) -> str:
         raw = self.model.logger.get_smoothed_value("correlation")
         speech = self.model.logger.get_smoothed_value("correlation_speech")
         return (
