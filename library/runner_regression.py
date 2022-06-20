@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
-from typing import Any, Protocol
+from collections import deque
+from dataclasses import astuple, dataclass
+from typing import Any, Deque, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -90,7 +91,7 @@ def run_regression(
 
     model_filename = f"{bench_model.__class__.__name__}"
     model_path = f"model_dumps/{model_filename}.pth"
-    tracker = BestModelTracker(bench_model, max_steps, cfg.upd_evry_n_steps, cfg.metric_iter)
+    tracker = BestMetricsTracker(bench_model, max_steps, cfg.upd_evry_n_steps, cfg.metric_iter)
     model_saver = ModelSaver(bench_model, model_path, tracker, cfg.early_stop_steps)
 
     for i in trange(max_steps):
@@ -130,16 +131,14 @@ class ModelIsStuckException(Exception):
 class ModelSaver:
     model: BenchModelRegressionBase
     model_path: str
-    tracker: BestModelTracker
+    tracker: BestMetricsTracker
     early_stop_steps: int
 
     def __post_init__(self) -> None:
         self.best_iteration = 0
 
     def update(self, iteration: int) -> None:
-        if not self.tracker.should_update(iteration):
-            return
-        if self.tracker.metrics_improved():
+        if self.tracker.is_metrics_improved():
             self.tracker.update_max_metrics(iteration)
             torch.save(self.model.model.state_dict(), self.model_path)
         elif (iteration - self.best_iteration) > self.early_stop_steps:
@@ -160,54 +159,56 @@ class ModelSaver:
             json.dump(result, f)
 
 
-class BestModelTracker:
-    def __init__(self, model: Any, max_steps: int, update_every_n_iter: int, metric_iter: int):
+class BestMetricsTracker:
+    def __init__(self, metrics_buflen: int = 100):
         self.best_iteration: int = 0
-        self.max_raw: float = -float("inf")
-        self.max_speech: float = -float("inf")
-        self.model = model
-        self.max_steps = max_steps
-        self.update_every_n_iter = update_every_n_iter
-        self.metric_iter = metric_iter
+        self.max_test_metrics: np.ndarray | None = None
+        self.test_metrics_buffer: Deque[np.ndarray] = deque()
+        self.train_metrics_buffer: Deque[np.ndarray] = deque()
+        self.buflen = metrics_buflen
 
-    def metrics_improved(self) -> bool:
-        raw = self.model.logger.get_smoothed_value("correlation")
-        speech = self.model.logger.get_smoothed_value("correlation_speech")
-        return raw >= self.max_raw or speech >= self.max_speech
+    def update_train(self, new_metrics: np.ndarray) -> None:
+        if len(self.train_metrics_buffer) >= self.buflen:
+            self.train_metrics_buffer.popleft()
+        self.train_metrics_buffer.append(new_metrics)
 
-    def get_final_metrics(self, generators: dict[str, Any], iteration: int) -> dict[str, Any]:
-        result = {}
-        for gen_name, gen in generators.items():
-            p = get_random_predictions(self.model.model, gen, self.metric_iter)
-            result[gen_name + "_corr"] = np.mean(corr_multiple(*p))
-        result["train_logs"] = self.model.logger.train_logs
-        result["val_logs"] = self.model.logger.test_logs
-        result["iterations"] = iteration
-        return result
+    def update_test(self, new_metrics: np.ndarray) -> None:
+        if len(self.test_metrics_buffer) >= self.buflen:
+            self.test_metrics_buffer.popleft()
+        self.test_metrics_buffer.append(new_metrics)
+
+    def get_smoothed_test_metrics(self) -> np.ndarray:
+        return np.asarray(self.test_metrics_buffer).mean(axis=0)
+
+    def is_metrics_improved(self) -> bool:
+        if self.max_test_metrics is None:
+            return True
+        rolling_metrics = self.get_smoothed_test_metrics()
+        return bool(np.all(rolling_metrics >= self.max_test_metrics))
 
     def update_max_metrics(self, iteration: int) -> None:
-        raw = self.model.logger.get_smoothed_value("correlation")
-        speech = self.model.logger.get_smoothed_value("correlation_speech")
-        self.max_raw = max(raw, self.max_raw)
-        self.max_speech = max(speech, self.max_speech)
+        self.max_test_metrics = self.get_smoothed_test_metrics()
         self.best_iteration = iteration
 
-    def should_update(self, iteration: int) -> bool:
-        if iteration == self.max_steps - 1:
-            return True
-        if iteration % self.update_every_n_iter:
-            return False
-        return True
+    # def get_final_metrics(self, generators: dict[str, Any], iteration: int) -> dict[str, Any]:
+    #     result = {}
+    #     for gen_name, gen in generators.items():
+    #         p = get_random_predictions(self.model.model, gen, self.metric_iter)
+    #         result[gen_name + "_corr"] = np.mean(corr_multiple(*p))
+    #     result["train_logs"] = self.model.logger.train_logs
+    #     result["val_logs"] = self.model.logger.test_logs
+    #     result["iterations"] = iteration
+    #     return result
 
-    def stop_message(self, iteration: int) -> str:
-        raw = self.model.logger.get_smoothed_value("correlation")
-        speech = self.model.logger.get_smoothed_value("correlation_speech")
-        return (
-            "Stopping model training due to no progress."
-            + f"\n{iteration=} "
-            + f"metric raw = {round(raw, 2)}, "
-            + f"metric speech = {round(speech, 2)}."
-            + f"\n{self.best_iteration=}, "
-            + f"metric raw = {round(self.max_raw, 2)} "
-            + f"metric speech = {round(self.max_speech, 2)}."
-        )
+    # def stop_message(self, iteration: int) -> str:
+    #     raw = self.model.logger.get_smoothed_value("correlation")
+    #     speech = self.model.logger.get_smoothed_value("correlation_speech")
+    #     return (
+    #         "Stopping model training due to no progress."
+    #         + f"\n{iteration=} "
+    #         + f"metric raw = {round(raw, 2)}, "
+    #         + f"metric speech = {round(speech, 2)}."
+    #         + f"\n{self.best_iteration=}, "
+    #         + f"metric raw = {round(self.max_raw, 2)} "
+    #         + f"metric speech = {round(self.max_speech, 2)}."
+    #     )
