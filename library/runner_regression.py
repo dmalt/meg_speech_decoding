@@ -53,7 +53,7 @@ def test_batch(bench_model, x_batch, y_batch):
     return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
 
 
-def update_metrics(y_predicted, y_batch, loss, speech_idx=None):
+def compute_metrics(y_predicted, y_batch, loss, speech_idx=None):
     y_batch = y_batch.cpu().detach().numpy()
 
     metrics = {}
@@ -63,17 +63,14 @@ def update_metrics(y_predicted, y_batch, loss, speech_idx=None):
     if speech_idx is not None:
         y_predicted, y_batch = y_predicted[speech_idx], y_batch[speech_idx]
         metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_batch)))
+    else:
+        metrics["correlation_speech"] = 0
 
     return metrics
 
 
 class ScalarLogger(Protocol):
     def add_scalar(self, tag: str, scalar_value: float, global_step: int | None) -> None:
-        ...
-
-    def add_scalars(
-        self, main_tag: str, tag_scalar_dict: dict[str, float], global_step: int | None
-    ) -> None:
         ...
 
 
@@ -91,21 +88,22 @@ def run_regression(
 
     model_filename = f"{bench_model.__class__.__name__}"
     model_path = f"model_dumps/{model_filename}.pth"
-    tracker = BestMetricsTracker(bench_model, max_steps, cfg.upd_evry_n_steps, cfg.metric_iter)
+    tracker = BestMetricsTracker()
     model_saver = ModelSaver(bench_model, model_path, tracker, cfg.early_stop_steps)
 
+    i = 0
     for i in trange(max_steps):
         x_train, y_train = next(train_generator)
         y_predicted, loss = train_batch(bench_model, x_train, y_train)
         speech_idx = detect_voice(y_train.detach().numpy())
-        train_metrics = update_metrics(y_predicted, y_train, loss, speech_idx=speech_idx)
+        train_metrics = compute_metrics(y_predicted, y_train, loss, speech_idx=speech_idx)
         for tag, value in train_metrics.items():
             logger.add_scalar(f"train/{tag}", value, i)
 
         x_test, y_test = next(test_generator)
         speech_idx = detect_voice(y_test.detach().numpy())
         y_predicted, loss = test_batch(bench_model, x_test, y_test)
-        test_metrics = update_metrics(y_predicted, y_test, loss, speech_idx=speech_idx)
+        test_metrics = compute_metrics(y_predicted, y_test, loss, speech_idx=speech_idx)
         for tag, value in test_metrics.items():
             logger.add_scalar(f"test/{tag}", value, i)
         try:
@@ -117,9 +115,10 @@ def run_regression(
     save_path = f"results/{model_filename}.json"
     generators = {"train": train_generator, "test": test_generator, "val": val_generator}
     model_saver.save_results(save_path, generators, i)
+    assert model_saver.tracker.max_test_metrics is not None
     return dict(
-        correlation_raw=model_saver.tracker.max_raw,
-        correlation_speech=model_saver.tracker.max_speech,
+        correlation_raw=model_saver.tracker.max_test_metrics[0],
+        correlation_speech=model_saver.tracker.max_test_metrics[1],
     )
 
 
@@ -138,8 +137,8 @@ class ModelSaver:
         self.best_iteration = 0
 
     def update(self, iteration: int) -> None:
-        if self.tracker.is_metrics_improved():
-            self.tracker.update_max_metrics(iteration)
+        if self.tracker.is_test_metrics_improved():
+            self.tracker.update_max_test_metrics(iteration)
             torch.save(self.model.model.state_dict(), self.model_path)
         elif (iteration - self.best_iteration) > self.early_stop_steps:
             msg = self.tracker.stop_message(iteration)
@@ -161,34 +160,27 @@ class ModelSaver:
 
 class BestMetricsTracker:
     def __init__(self, metrics_buflen: int = 100):
-        self.best_iteration: int = 0
-        self.max_test_metrics: np.ndarray | None = None
-        self.test_metrics_buffer: Deque[np.ndarray] = deque()
-        self.train_metrics_buffer: Deque[np.ndarray] = deque()
+        self.best_metrics: np.ndarray | None = None
+        self.metrics_buffer: Deque[np.ndarray] = deque()
         self.buflen = metrics_buflen
 
-    def update_train(self, new_metrics: np.ndarray) -> None:
-        if len(self.train_metrics_buffer) >= self.buflen:
-            self.train_metrics_buffer.popleft()
-        self.train_metrics_buffer.append(new_metrics)
+    def update_buffer(self, new_metrics: np.ndarray) -> None:
+        if len(self.metrics_buffer) >= self.buflen:
+            self.metrics_buffer.popleft()
+        self.metrics_buffer.append(new_metrics)
 
-    def update_test(self, new_metrics: np.ndarray) -> None:
-        if len(self.test_metrics_buffer) >= self.buflen:
-            self.test_metrics_buffer.popleft()
-        self.test_metrics_buffer.append(new_metrics)
-
-    def get_smoothed_test_metrics(self) -> np.ndarray:
-        return np.asarray(self.test_metrics_buffer).mean(axis=0)
-
-    def is_metrics_improved(self) -> bool:
-        if self.max_test_metrics is None:
+    def is_improved(self) -> bool:
+        if self.best_metrics is None:
             return True
-        rolling_metrics = self.get_smoothed_test_metrics()
-        return bool(np.all(rolling_metrics >= self.max_test_metrics))
+        smoothed_metrics = self.get_smoothed_metrics()
+        return bool(np.all(smoothed_metrics >= self.best_metrics))
 
-    def update_max_metrics(self, iteration: int) -> None:
-        self.max_test_metrics = self.get_smoothed_test_metrics()
-        self.best_iteration = iteration
+    def update_best(self) -> None:
+        self.best_metrics = self.get_smoothed_metrics()
+
+    def get_smoothed_metrics(self) -> np.ndarray:
+        assert self.metrics_buffer, "buffer is empty"
+        return np.asarray(self.metrics_buffer).mean(axis=0)
 
     # def get_final_metrics(self, generators: dict[str, Any], iteration: int) -> dict[str, Any]:
     #     result = {}
