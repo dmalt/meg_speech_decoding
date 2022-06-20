@@ -11,6 +11,7 @@ from hydra.utils import call, instantiate
 from ndp.signal import Signal, Signal1D
 from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
 from omegaconf import OmegaConf
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from library import git_utils, hydra_utils
 from library.bench_models_regression import BenchModelRegressionBase
@@ -84,9 +85,10 @@ def main(cfg: hydra_utils.Config) -> None:
     model = SimpleNet(cfg.model)
     bench_model = BenchModelRegressionBase(model, cfg.train_runner.learning_rate)
 
-    metrics = run_regression(bench_model, dataset, cfg.train_runner, cfg.debug)
+    logger = SummaryWriter("tensorboard_events")
+    metrics = run_regression(bench_model, dataset, cfg.train_runner, logger, cfg.debug)
 
-    bench_model.logger.tensorboard_writer.add_hparams(
+    logger.add_hparams(
         dict(
             lag_backward=cfg.lag_backward,
             lag_forward=cfg.lag_forward,

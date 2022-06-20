@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -52,7 +52,7 @@ def test_batch(bench_model, x_batch, y_batch):
     return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
 
 
-def update_metrics(bench_model, y_predicted, y_batch, loss, iteration, is_train, speech_idx=None):
+def update_metrics(y_predicted, y_batch, loss, speech_idx=None):
     y_batch = y_batch.cpu().detach().numpy()
 
     metrics = {}
@@ -63,14 +63,23 @@ def update_metrics(bench_model, y_predicted, y_batch, loss, iteration, is_train,
         y_predicted, y_batch = y_predicted[speech_idx], y_batch[speech_idx]
         metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_batch)))
 
-    for key, value in metrics.items():
-        bench_model.logger.add_value(key, is_train, value, iteration)
-
     return metrics
 
 
+class ScalarLogger(Protocol):
+    def add_scalar(self, tag: str, scalar_value: float, global_step: int | None) -> None:
+        ...
+
+    def add_scalars(
+        self, main_tag: str, tag_scalar_dict: dict[str, float], global_step: int | None
+    ) -> None:
+        ...
+
+
 # TODO: change dataset type
-def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> dict[str, float]:
+def run_regression(
+    bench_model, dataset: Continuous, cfg, logger: ScalarLogger, debug: bool = False
+) -> dict[str, float]:
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     bs = cfg.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
@@ -88,16 +97,16 @@ def run_regression(bench_model, dataset: Continuous, cfg, debug=False) -> dict[s
         x_train, y_train = next(train_generator)
         y_predicted, loss = train_batch(bench_model, x_train, y_train)
         speech_idx = detect_voice(y_train.detach().numpy())
-        update_metrics(
-            bench_model, y_predicted, y_train, loss, i, is_train=True, speech_idx=speech_idx
-        )
+        train_metrics = update_metrics(y_predicted, y_train, loss, speech_idx=speech_idx)
+        for tag, value in train_metrics.items():
+            logger.add_scalar(f"train/{tag}", value, i)
 
         x_test, y_test = next(test_generator)
         speech_idx = detect_voice(y_test.detach().numpy())
         y_predicted, loss = test_batch(bench_model, x_test, y_test)
-        update_metrics(
-            bench_model, y_predicted, y_test, loss, i, is_train=False, speech_idx=speech_idx
-        )
+        test_metrics = update_metrics(y_predicted, y_test, loss, speech_idx=speech_idx)
+        for tag, value in test_metrics.items():
+            logger.add_scalar(f"test/{tag}", value, i)
         try:
             model_saver.update(i)
         except ModelIsStuckException as e:
