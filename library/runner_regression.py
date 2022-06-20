@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-import json
 import logging
 from collections import deque
-from dataclasses import astuple, dataclass
-from typing import Any, Deque, Protocol
+from typing import Deque, Generator, Protocol
 
 import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
-
-from .runner_common import infinite
-from .torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
 
@@ -31,23 +25,22 @@ def corr_multiple(x, y):
     return [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
 
 
-def train_batch(bench_model, x_batch, y_batch):
-    bench_model.model.train()
-    # loss_function = nn.MSELoss()
+def train_batch(model: nn.Module, optimizer: torch.optim.Optimizer, x_batch, y_batch):
+    model.train()
     loss_function = nn.MSELoss()
-    bench_model.optimizer.zero_grad()
-    y_predicted = bench_model.model(x_batch)
+    optimizer.zero_grad()
+    y_predicted = model(x_batch)
     loss = loss_function(y_predicted, y_batch)
     loss.backward()
-    bench_model.optimizer.step()
+    optimizer.step()
     return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
 
 
-def test_batch(bench_model, x_batch, y_batch):
-    bench_model.model.eval()
+def test_batch(model: nn.Module, x_batch, y_batch):
+    model.eval()
     with torch.no_grad():
         loss_function = nn.MSELoss()
-        y_predicted = bench_model.model(x_batch)
+        y_predicted = model(x_batch)
         loss = loss_function(y_predicted, y_batch)
     return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
 
@@ -68,47 +61,60 @@ def compute_metrics(y_predicted, y_batch):
     return metrics
 
 
-class ScalarLogger(Protocol):
+class ScalarTracker(Protocol):
     def add_scalar(self, tag: str, scalar_value: float, global_step: int | None) -> None:
         ...
 
 
+def loop_generator(model: nn.Module, data_generator, optimizer=None) -> Generator:
+    for x, y in data_generator:
+        if optimizer is not None:
+            y_predicted, loss = train_batch(model, optimizer, x, y)
+        else:
+            y_predicted, loss = test_batch(model, x, y)
+        metrics = compute_metrics(y_predicted, y)
+        metrics["loss"] = loss
+        yield metrics
+
+
 # TODO: change dataset type
-def train_loop(
-    model, train_generator, test_generator, cfg, logger: ScalarLogger, debug: bool = False
+def run_experiment(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    train_gen,
+    test_gen,
+    cfg,
+    experiment_tracker: ScalarTracker,
 ) -> None:
 
-    max_steps = cfg.max_iterations_count if not debug else 1_000
+    n_steps = cfg.max_iterations_count
+    # n_steps = 1000
 
     model_filename = f"{model.__class__.__name__}"
     model_path = f"model_dumps/{model_filename}.pth"
+
     metrics_tracker = BestMetricsTracker()
 
-    i = 0
-    for i in trange(max_steps):
-        x_train, y_train = next(train_generator)
-        y_predicted, loss = train_batch(model, x_train, y_train)
-        logger.add_scalar("train/loss", loss, i)
-        train_metrics = compute_metrics(y_predicted, y_train)
+    train_loop = loop_generator(model, train_gen, optimizer)
+    test_loop = loop_generator(model, test_gen)
+    for i, train_metrics, test_metrics in zip(trange(n_steps), train_loop, test_loop):
         for tag, value in train_metrics.items():
-            logger.add_scalar(f"train/{tag}", value, i)
-
-        x_test, y_test = next(test_generator)
-        y_predicted, loss = test_batch(model, x_test, y_test)
-        logger.add_scalar("test/loss", loss, i)
-        test_metrics = compute_metrics(y_predicted, y_test)
+            experiment_tracker.add_scalar(f"train/{tag}", value, i)
         for tag, value in test_metrics.items():
-            logger.add_scalar(f"test/{tag}", value, i)
+            experiment_tracker.add_scalar(f"test/{tag}", value, i)
 
-        metrics_tracker.update_buffer(np.array([v for v in test_metrics.values()]))
-        if not i % cfg.upd_evry_n_steps and metrics_tracker.is_improved():
-            metrics_tracker.update_best()
-            torch.save(model.model.state_dict(), model_path)
+        metrics_tracker.update_buffer(np.array([v for k, v in test_metrics.items() if k != "loss"]))
+        if (not i % cfg.upd_evry_n_steps):
+            log.debug(f"{metrics_tracker.best_metrics=}, {metrics_tracker.get_smoothed_metrics()=}")
+            if metrics_tracker.is_improved():
+                metrics_tracker.update_best()
+                log.info(f"Dumping model for iteration = {i}")
+                torch.save(model.state_dict(), model_path)
 
     if metrics_tracker.is_improved():
-        torch.save(model.model.state_dict(), model_path)
+        torch.save(model.state_dict(), model_path)
 
-    model.model.load_state_dict(torch.load(model_path))  # type: ignore
+    model.load_state_dict(torch.load(model_path))  # type: ignore
 
 
 class BestMetricsTracker:

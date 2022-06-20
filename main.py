@@ -2,23 +2,25 @@ import logging
 import os
 import os.path
 import sys
+from collections import Counter
 from time import perf_counter
 
 import hydra
 import numpy as np
 import numpy.typing as npt
+import torch
 from hydra.utils import call, instantiate
 from ndp.signal import Signal, Signal1D
 from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_samples
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
+from tqdm import trange
 
 from library import git_utils, hydra_utils
-from library.bench_models_regression import BenchModelRegressionBase
 from library.models_regression import SimpleNet
 from library.runner_common import get_random_predictions, infinite
-from library.runner_regression import corr_multiple, train_loop
+from library.runner_regression import corr_multiple, loop_generator, run_experiment
 from library.torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
@@ -54,12 +56,7 @@ def create_dirs() -> None:
             log.debug(f"{dir_name} dir created")
 
 
-@hydra.main(config_path="./configs", config_name="config")
-def main(cfg: hydra_utils.Config) -> None:
-    log.debug(f"Current working directory is {os.getcwd()}")
-    handle_debug(cfg.debug, cfg)
-    create_dirs()
-
+def create_dataset(cfg: hydra_utils.Config) -> tuple[Continuous, float, float]:
     log.info("Loading data...")
     t1 = perf_counter()
     X: Signal[npt._32Bit]
@@ -82,30 +79,46 @@ def main(cfg: hydra_utils.Config) -> None:
     t3 = perf_counter()
     log.info(f"Transforming data finished in {t3 - t2:.2f} sec.")
     log.debug(f"{X.data.shape=}, {Y.data.shape=}")
-    dataset = Continuous(np.asarray(X), np.asarray(Y), cfg.lag_backward, cfg.lag_forward)
+    return Continuous(np.asarray(X), np.asarray(Y), cfg.lag_backward, cfg.lag_forward), t1, t3
 
+
+@hydra.main(config_path="./configs", config_name="config")
+def main(cfg: hydra_utils.Config) -> None:
+    log.debug(f"Current working directory is {os.getcwd()}")
+    handle_debug(cfg.debug, cfg)
+    create_dirs()
+
+    dataset, t1, t3 = create_dataset(cfg)
     model = SimpleNet(cfg.model)
-    bench_model = BenchModelRegressionBase(model, cfg.train_runner.learning_rate)
+    if torch.cuda.is_available():
+        model = model.cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_runner.learning_rate)
 
-    logger = SummaryWriter("tensorboard_events")
+    tracker = SummaryWriter("tensorboard_events")  # type: ignore
 
     train, test = dataset.train_test_split(cfg.train_runner.train_test_ratio)
     bs = cfg.train_runner.batch_size
     train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
     test_generator = infinite(DataLoader(test, batch_size=bs, shuffle=True))
-    train_loop(bench_model, train_generator, test_generator, cfg.train_runner, logger, cfg.debug)
+    run_experiment(model, optimizer, train_generator, test_generator, cfg.train_runner, tracker)
 
-    metrics = {}
-    p = get_random_predictions(bench_model.model, train_generator, cfg.train_runner.metric_iter)
-    metrics["train_corr"] = np.mean(corr_multiple(*p))
+    metrics = Counter()
+    for _, m in zip(trange(cfg.train_runner.metric_iter), loop_generator(model, train_generator)):
+        metrics["train_corr"] += m["correlation"] / cfg.train_runner.metric_iter
+        metrics["train_corr_speech"] += m["correlation_speech"] / cfg.train_runner.metric_iter
+        metrics["train_loss"] += m["loss"] / cfg.train_runner.metric_iter
+    for _, m in zip(trange(cfg.train_runner.metric_iter), loop_generator(model, test_generator)):
+        metrics["test_corr"] += m["correlation"] / cfg.train_runner.metric_iter
+        metrics["test_corr_speech"] += m["correlation_speech"] / cfg.train_runner.metric_iter
+        metrics["test_loss"] += m["loss"] / cfg.train_runner.metric_iter
 
-    logger.add_hparams(
+    tracker.add_hparams(
         dict(
             lag_backward=cfg.lag_backward,
             lag_forward=cfg.lag_forward,
             target_features_cnt=cfg.target_features_cnt,
         ),
-        metrics,
+        dict(metrics),
     )
     t4 = perf_counter()
     log.info(f"Model training finished in {t4 - t3:.2f} sec")
