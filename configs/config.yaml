@@ -10,14 +10,12 @@ target_features_cnt: 20  # e.g. n_mels for melspectrogram
 selected_channels: ${python_range:"range(0, 306, 3)"}
 debug: false
 
-train_runner:
-  runs_count: 1       # not used
-  batch_size: 100
-  max_iterations_count: 8000
-  metric_iter: 250
-  upd_evry_n_steps: 250
-  train_test_ratio: 0.6
-  learning_rate: 0.0003
+batch_size: 100
+n_steps: 8000
+metric_iter: 250
+model_upd_freq: 250
+train_test_ratio: 0.6
+learning_rate: 0.0003
 
 hydra:
   run:

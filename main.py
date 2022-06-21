@@ -2,7 +2,6 @@ import logging
 import os
 import os.path
 import sys
-from collections import Counter
 from time import perf_counter
 
 import hydra
@@ -15,12 +14,11 @@ from ndp.signal.pipelines import Signal1DProcessor, SignalProcessor, align_sampl
 from omegaconf import OmegaConf
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from tqdm import trange
+from tqdm import trange  # type: ignore
 
 from library import git_utils, hydra_utils
 from library.models_regression import SimpleNet
-from library.runner_common import get_random_predictions, infinite
-from library.runner_regression import corr_multiple, loop_generator, run_experiment
+from library.runner_regression import TrainTestLoopRunner, run_experiment
 from library.torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
@@ -92,25 +90,32 @@ def main(cfg: hydra_utils.Config) -> None:
     model = SimpleNet(cfg.model)
     if torch.cuda.is_available():
         model = model.cuda()
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.train_runner.learning_rate)
 
-    tracker = SummaryWriter("tensorboard_events")  # type: ignore
+    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
 
-    train, test = dataset.train_test_split(cfg.train_runner.train_test_ratio)
-    bs = cfg.train_runner.batch_size
-    train_generator = infinite(DataLoader(train, batch_size=bs, shuffle=True))
-    test_generator = infinite(DataLoader(test, batch_size=bs, shuffle=True))
-    run_experiment(model, optimizer, train_generator, test_generator, cfg.train_runner, tracker)
+    tracker = SummaryWriter("TB")  # type: ignore
 
-    metrics = Counter()
-    for _, m in zip(trange(cfg.train_runner.metric_iter), loop_generator(model, train_generator)):
-        metrics["train_corr"] += m["correlation"] / cfg.train_runner.metric_iter
-        metrics["train_corr_speech"] += m["correlation_speech"] / cfg.train_runner.metric_iter
-        metrics["train_loss"] += m["loss"] / cfg.train_runner.metric_iter
-    for _, m in zip(trange(cfg.train_runner.metric_iter), loop_generator(model, test_generator)):
-        metrics["test_corr"] += m["correlation"] / cfg.train_runner.metric_iter
-        metrics["test_corr_speech"] += m["correlation_speech"] / cfg.train_runner.metric_iter
-        metrics["test_loss"] += m["loss"] / cfg.train_runner.metric_iter
+    train, test = dataset.train_test_split(cfg.train_test_ratio)
+    train_ldr = DataLoader(train, batch_size=cfg.batch_size, shuffle=True)
+    test_ldr = DataLoader(test, batch_size=cfg.batch_size, shuffle=True)
+    run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, tracker)
+
+    metrics = dict(
+        train_corr=0.,
+        train_corr_speech=0.,
+        train_loss=0.,
+        test_corr=0.,
+        test_corr_speech=0.,
+        test_loss=0.,
+    )
+    for _, (m, l) in zip(trange(cfg.metric_iter), TrainTestLoopRunner(model, train_ldr)):
+        metrics["train_corr"] += m["correlation"] / cfg.metric_iter
+        metrics["train_corr_speech"] += m["correlation_speech"] / cfg.metric_iter
+        metrics["train_loss"] += l / cfg.metric_iter
+    for _, (m, l) in zip(trange(cfg.metric_iter), TrainTestLoopRunner(model, test_ldr)):
+        metrics["test_corr"] += m["correlation"] / cfg.metric_iter
+        metrics["test_corr_speech"] += m["correlation_speech"] / cfg.metric_iter
+        metrics["test_loss"] += l / cfg.metric_iter
 
     tracker.add_hparams(
         dict(

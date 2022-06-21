@@ -8,7 +8,11 @@ import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
+from torch.optim.optimizer import Optimizer
+from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
+
+from library.runner_common import infinite  # type: ignore
 
 log = logging.getLogger(__name__)
 
@@ -66,50 +70,53 @@ class ScalarTracker(Protocol):
         ...
 
 
-def loop_generator(model: nn.Module, data_generator, optimizer=None) -> Generator:
-    for x, y in data_generator:
-        if optimizer is not None:
-            y_predicted, loss = train_batch(model, optimizer, x, y)
-        else:
-            y_predicted, loss = test_batch(model, x, y)
-        metrics = compute_metrics(y_predicted, y)
-        metrics["loss"] = loss
-        yield metrics
+class TrainTestLoopRunner:
+    def __init__(self, model: nn.Module, loader: DataLoader, optimizer: Optimizer | None = None):
+        self.model = model
+        self.data_loader = loader
+        self.optimizer = optimizer
+
+    def __iter__(self) -> Generator[tuple[dict[str, float], float], None, None]:
+        for x, y in self.data_loader:
+            if self.optimizer is not None:
+                y_predicted, loss = train_batch(self.model, self.optimizer, x, y)
+            else:
+                y_predicted, loss = test_batch(self.model, x, y)
+            metrics = compute_metrics(y_predicted, y)
+            yield metrics, loss
 
 
 # TODO: change dataset type
 def run_experiment(
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    train_gen,
-    test_gen,
-    cfg,
+    model: nn.Module,
+    optimizer: Optimizer,
+    train_loader: DataLoader,
+    test_loader: DataLoader,
+    n_steps: int,
+    upd_steps_freq: int,
     experiment_tracker: ScalarTracker,
 ) -> None:
-
-    n_steps = cfg.max_iterations_count
-    # n_steps = 1000
 
     model_filename = f"{model.__class__.__name__}"
     model_path = f"model_dumps/{model_filename}.pth"
 
     metrics_tracker = BestMetricsTracker()
 
-    train_loop = loop_generator(model, train_gen, optimizer)
-    test_loop = loop_generator(model, test_gen)
-    for i, train_metrics, test_metrics in zip(trange(n_steps), train_loop, test_loop):
-        for tag, value in train_metrics.items():
+    train_loop = infinite(TrainTestLoopRunner(model, train_loader, optimizer))
+    test_loop = infinite(TrainTestLoopRunner(model, test_loader))
+    for i, (m_train, l_train), (m_test, l_test) in zip(trange(n_steps), train_loop, test_loop):
+        for tag, value in m_train.items():
             experiment_tracker.add_scalar(f"train/{tag}", value, i)
-        for tag, value in test_metrics.items():
+        experiment_tracker.add_scalar("train/loss", l_train, i)
+        for tag, value in m_test.items():
             experiment_tracker.add_scalar(f"test/{tag}", value, i)
+        experiment_tracker.add_scalar("test/loss", l_test, i)
 
-        metrics_tracker.update_buffer(np.array([v for k, v in test_metrics.items() if k != "loss"]))
-        if (not i % cfg.upd_evry_n_steps):
-            log.debug(f"{metrics_tracker.best_metrics=}, {metrics_tracker.get_smoothed_metrics()=}")
-            if metrics_tracker.is_improved():
-                metrics_tracker.update_best()
-                log.info(f"Dumping model for iteration = {i}")
-                torch.save(model.state_dict(), model_path)
+        metrics_tracker.update_buffer(np.array([v for v in m_test.values()]))
+        if not i % upd_steps_freq and metrics_tracker.is_improved():
+            metrics_tracker.update_best()
+            log.info(f"Dumping model for iteration = {i}")
+            torch.save(model.state_dict(), model_path)
 
     if metrics_tracker.is_improved():
         torch.save(model.state_dict(), model_path)
