@@ -53,17 +53,3 @@ def setup_hydra() -> None:
 def set_debug_level() -> None:
     for logger_name in logging.root.manager.loggerDict:
         logging.getLogger(logger_name).setLevel(logging.DEBUG)
-
-
-def handle_debug(debug: bool, cfg: hydra_utils.Config) -> None:
-    if debug:
-        hydra_utils.set_debug_level()
-        OmegaConf.resolve(cfg)  # type: ignore
-        log.debug(OmegaConf.to_yaml(cfg))
-    elif git_utils.is_repo_clean():
-        with open("commit_hash", "w") as f:
-            f.write(git_utils.get_latest_commit_hash())
-    else:
-        prompt_proceeding_with_dirty_repo()
-
-

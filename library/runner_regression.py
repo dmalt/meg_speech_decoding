@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from typing import Deque, Generator, Protocol
+from typing import Any, Callable, Deque, Generator, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -13,77 +13,85 @@ from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
 
 from library.runner_common import infinite  # type: ignore
+from library.type_aliases import ChanBatch, ChanBatchTensor, SigBatchTensor, SignalBatch
 
 log = logging.getLogger(__name__)
 
 
-def detect_voice(
-    y_batch: npt.NDArray[np.floating[npt.NBitBase]], thresh: float = 1
-) -> npt.NDArray[np.bool_]:
+def detect_voice(y_batch: SignalBatch, thresh: float = 1) -> npt.NDArray[np.bool_]:
     n_channels = y_batch.shape[1]
     return np.sum(y_batch > thresh, axis=1) > int(n_channels * 0.25)
 
 
-def corr_multiple(x, y):
+def corr_multiple(x: SignalBatch, y: ChanBatch) -> list[Any]:
     assert x.shape[1] == y.shape[1], f"{x.shape=}, {y.shape=}"
     return [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
 
 
-def train_batch(model: nn.Module, optimizer: torch.optim.Optimizer, x_batch, y_batch):
-    model.train()
-    loss_function = nn.MSELoss()
-    optimizer.zero_grad()
-    y_predicted = model(x_batch)
-    loss = loss_function(y_predicted, y_batch)
-    loss.backward()
-    optimizer.step()
-    return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
-
-
-def test_batch(model: nn.Module, x_batch, y_batch):
-    model.eval()
-    with torch.no_grad():
-        loss_function = nn.MSELoss()
-        y_predicted = model(x_batch)
-        loss = loss_function(y_predicted, y_batch)
-    return y_predicted.cpu().detach().numpy(), loss.cpu().detach().numpy()
-
-
-def compute_metrics(y_predicted, y_batch):
-    y_batch = y_batch.cpu().detach().numpy()
-    speech_idx = detect_voice(y_batch)
+def compute_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
+    speech_idx = detect_voice(y_true)
 
     metrics = {}
-    metrics["correlation"] = np.nanmean(corr_multiple(y_predicted, y_batch))
+    metrics["correlation"] = np.nanmean(corr_multiple(y_predicted, y_true))
 
     if speech_idx is not None:
-        y_predicted, y_batch = y_predicted[speech_idx], y_batch[speech_idx]
-        metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_batch)))
+        y_predicted, y_true = y_predicted[speech_idx], y_true[speech_idx]
+        metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_true)))
     else:
         metrics["correlation_speech"] = 0
 
     return metrics
 
 
-class ScalarTracker(Protocol):
-    def add_scalar(self, tag: str, scalar_value: float, global_step: int | None) -> None:
-        ...
+LossFunction = Callable[[ChanBatchTensor, ChanBatchTensor], torch.Tensor]
 
 
 class TrainTestLoopRunner:
-    def __init__(self, model: nn.Module, loader: DataLoader, optimizer: Optimizer | None = None):
+    def __init__(
+        self,
+        model: nn.Module,
+        loader: DataLoader,
+        optimizer: Optimizer | None = None,
+        loss_function: LossFunction = nn.MSELoss(),
+    ):
         self.model = model
         self.data_loader = loader
         self.optimizer = optimizer
+        self.loss_function = loss_function
 
-    def __iter__(self) -> Generator[tuple[dict[str, float], float], None, None]:
-        for x, y in self.data_loader:
+    def __iter__(self) -> Generator[tuple[ChanBatch, ChanBatch, float], None, None]:
+        x_batch: SigBatchTensor
+        y_batch: ChanBatchTensor
+        for x_batch, y_batch in self.data_loader:
+            if torch.cuda.is_available():
+                x_batch, y_batch = x_batch.cuda(), y_batch.cuda()
             if self.optimizer is not None:
-                y_predicted, loss = train_batch(self.model, self.optimizer, x, y)
+                y_predicted, loss = self.train_batch(x_batch, y_batch)
             else:
-                y_predicted, loss = test_batch(self.model, x, y)
-            metrics = compute_metrics(y_predicted, y)
-            yield metrics, loss
+                y_predicted, loss = self.test_batch(x_batch, y_batch)
+            yield y_predicted, y_batch.cpu().detach().numpy(), loss
+
+    def train_batch(self, x: SigBatchTensor, y: ChanBatchTensor) -> tuple[ChanBatch, float]:
+        self.model.train()
+        assert self.optimizer is not None
+        self.optimizer.zero_grad()
+        y_predicted = self.model(x)
+        loss = self.loss_function(y_predicted, y)
+        loss.backward()
+        self.optimizer.step()
+        return y_predicted.cpu().detach().numpy(), float(loss.cpu().detach().numpy())
+
+    def test_batch(self, x: SigBatchTensor, y: ChanBatchTensor) -> tuple[ChanBatch, float]:
+        self.model.eval()
+        with torch.no_grad():
+            y_predicted = self.model(x)
+            loss = self.loss_function(y_predicted, y)
+        return y_predicted.cpu().detach().numpy(), float(loss.cpu().detach().numpy())
+
+
+class ScalarTracker(Protocol):
+    def add_scalar(self, tag: str, scalar_value: float, global_step: int | None) -> None:
+        ...
 
 
 # TODO: change dataset type
@@ -102,9 +110,14 @@ def run_experiment(
 
     metrics_tracker = BestMetricsTracker()
 
-    train_loop = infinite(TrainTestLoopRunner(model, train_loader, optimizer))
-    test_loop = infinite(TrainTestLoopRunner(model, test_loader))
-    for i, (m_train, l_train), (m_test, l_test) in zip(trange(n_steps), train_loop, test_loop):
+    def to_metrics(args: tuple[ChanBatch, ChanBatch, float]) -> tuple[dict[str, float], float]:
+        y_predicted, y_true, loss = args
+        return compute_metrics(y_predicted, y_true), loss
+
+    train_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, train_loader, optimizer)))
+    test_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, test_loader)))
+    tr = trange(n_steps, desc="Experiment main loop")
+    for i, (m_train, l_train), (m_test, l_test) in zip(tr, train_loop, test_loop):
         for tag, value in m_train.items():
             experiment_tracker.add_scalar(f"train/{tag}", value, i)
         experiment_tracker.add_scalar("train/loss", l_train, i)
