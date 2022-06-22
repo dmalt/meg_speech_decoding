@@ -79,8 +79,8 @@ def main(cfg: MainConfig) -> None:
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     tracker = SummaryWriter("TB")  # type: ignore
     run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, tracker)
-    metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
 
+    metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
     tracker.add_hparams(get_selected_params(cfg), metrics)
 
 
