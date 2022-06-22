@@ -12,7 +12,7 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
 
-from library.runner_common import infinite  # type: ignore
+from library.func_utils import infinite, log_execution_time
 from library.type_aliases import ChanBatch, ChanBatchTensor, SigBatchTensor, SignalBatch
 
 log = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ class ScalarTracker(Protocol):
 MetricsComputer = Callable[[ChanBatch, ChanBatch], dict[str, float]]
 
 
-# TODO: change dataset type
+@log_execution_time(desc="the experiment")
 def run_experiment(
     model: nn.Module,
     optimizer: Optimizer,
