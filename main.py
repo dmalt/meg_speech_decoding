@@ -18,7 +18,11 @@ from tqdm import trange  # type: ignore
 
 from library import git_utils, hydra_utils
 from library.models_regression import SimpleNet
-from library.runner_regression import TrainTestLoopRunner, run_experiment
+from library.runner_regression import (
+    TrainTestLoopRunner,
+    compute_regression_metrics,
+    run_experiment,
+)
 from library.torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
@@ -108,11 +112,15 @@ def main(cfg: hydra_utils.Config) -> None:
         test_corr_speech=0.,
         test_loss=0.,
     )
-    for _, (m, l) in zip(trange(cfg.metric_iter), TrainTestLoopRunner(model, train_ldr)):
+    tr = trange(cfg.metric_iter, desc="Best model evaluation loop: train")
+    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, train_ldr)):
+        m = compute_regression_metrics(y_pred, y_true)
         metrics["train_corr"] += m["correlation"] / cfg.metric_iter
         metrics["train_corr_speech"] += m["correlation_speech"] / cfg.metric_iter
         metrics["train_loss"] += l / cfg.metric_iter
-    for _, (m, l) in zip(trange(cfg.metric_iter), TrainTestLoopRunner(model, test_ldr)):
+    tr = trange(cfg.metric_iter, desc="Best model evaluation loop: test")
+    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, test_ldr)):
+        m = compute_regression_metrics(y_pred, y_true)
         metrics["test_corr"] += m["correlation"] / cfg.metric_iter
         metrics["test_corr_speech"] += m["correlation_speech"] / cfg.metric_iter
         metrics["test_loss"] += l / cfg.metric_iter

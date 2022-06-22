@@ -28,7 +28,7 @@ def corr_multiple(x: SignalBatch, y: ChanBatch) -> list[Any]:
     return [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
 
 
-def compute_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
+def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
     speech_idx = detect_voice(y_true)
 
     metrics = {}
@@ -94,6 +94,9 @@ class ScalarTracker(Protocol):
         ...
 
 
+MetricsComputer = Callable[[ChanBatch, ChanBatch], dict[str, float]]
+
+
 # TODO: change dataset type
 def run_experiment(
     model: nn.Module,
@@ -103,6 +106,7 @@ def run_experiment(
     n_steps: int,
     upd_steps_freq: int,
     experiment_tracker: ScalarTracker,
+    compute_metrics: MetricsComputer = compute_regression_metrics,
 ) -> None:
 
     model_filename = f"{model.__class__.__name__}"
