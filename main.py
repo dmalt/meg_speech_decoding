@@ -18,11 +18,7 @@ from library import git_utils, main_utils
 from library.config_schema import MainConfig, get_selected_params
 from library.func_utils import log_execution_time
 from library.models_regression import SimpleNet
-from library.runner_regression import (
-    TrainTestLoopRunner,
-    compute_regression_metrics,
-    run_experiment,
-)
+from library.runner import TrainTestLoopRunner, compute_regression_metrics, run_experiment
 from library.torch_datasets import Continuous
 
 log = logging.getLogger(__name__)
