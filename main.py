@@ -1,6 +1,7 @@
 import logging
 import os
 import os.path
+from collections import defaultdict
 from typing import Any
 
 import hydra
@@ -47,28 +48,16 @@ def create_data_loaders(
     return train_ldr, test_ldr
 
 
-def get_final_metrics(model, train_ldr, test_ldr, nsteps):  # type: ignore
-    metrics = dict(
-        train_corr=0.0,
-        train_corr_speech=0.0,
-        train_loss=0.0,
-        test_corr=0.0,
-        test_corr_speech=0.0,
-        test_loss=0.0,
-    )
-    tr = trange(nsteps, desc="Best model evaluation loop: train")
-    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, train_ldr)):
-        m = compute_regression_metrics(y_pred, y_true)
-        metrics["train_corr"] += m["correlation"] / nsteps
-        metrics["train_corr_speech"] += m["correlation_speech"] / nsteps
-        metrics["train_loss"] += l / nsteps
-    tr = trange(nsteps, desc="Best model evaluation loop: test")
-    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, test_ldr)):
-        m = compute_regression_metrics(y_pred, y_true)
-        metrics["test_corr"] += m["correlation"] / nsteps
-        metrics["test_corr_speech"] += m["correlation_speech"] / nsteps
-        metrics["test_loss"] += l / nsteps
-    return metrics
+def get_final_metrics(model, train_ldr, test_ldr, nsteps: int) -> dict[str, float]:  # type: ignore
+    metrics = defaultdict(lambda: 0.0)  # type: ignore
+    for stage, ldr in (("train", train_ldr), ("test", test_ldr)):
+        tr = trange(nsteps, desc=f"Best model evaluation loop: {stage}")
+        for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
+            m = compute_regression_metrics(y_pred, y_true)
+            metrics[f"{stage}_corr"] += m["correlation"] / nsteps
+            metrics[f"{stage}_corr_speech"] += m["correlation_speech"] / nsteps
+            metrics[f"{stage}_loss"] += l / nsteps
+    return dict(metrics)
 
 
 @log_execution_time()
