@@ -2,7 +2,8 @@ import logging
 import os
 import os.path
 from collections import defaultdict
-from typing import Any
+from functools import partial
+from typing import Any, Callable, DefaultDict
 
 import hydra
 import matplotlib.pyplot as plt  # type: ignore
@@ -17,7 +18,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm import trange  # type: ignore
 
 from library import git_utils, main_utils
-from library.config_schema import MainConfig, get_selected_params
+from library.config_schema import MainConfig, flatten_dict, get_selected_params
 from library.func_utils import log_execution_time
 from library.interpreter import ModelInterpreter
 from library.models_regression import SimpleNet
@@ -52,15 +53,15 @@ def create_data_loaders(
 
 
 @log_execution_time("collecting best model metrics")
-def get_final_metrics(model, train_ldr, test_ldr, nsteps: int) -> dict[str, float]:  # type: ignore
-    metrics = defaultdict(lambda: 0.0)  # type: ignore
-    for stage, ldr in (("train", train_ldr), ("test", test_ldr)):
-        tr = trange(nsteps, desc=f"Best model evaluation loop: {stage}")
-        for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
-            m = compute_regression_metrics(y_pred, y_true)
-            metrics[f"{stage}/corr"] += m["correlation"] / nsteps
-            metrics[f"{stage}/corr_speech"] += m["correlation_speech"] / nsteps
-            metrics[f"{stage}/loss"] += l / nsteps
+def eval_model(
+    model: torch.nn.Module, ldr: DataLoader, metrics_func: Callable, nsteps: int, desc: str = ""
+) -> dict[str, float]:
+    metrics: DefaultDict[str, float] = defaultdict(lambda: 0.0)
+    tr = trange(nsteps, desc=desc)
+    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
+        metrics["loss"] += l / nsteps
+        for k, v in metrics_func(y_pred, y_true).items():
+            metrics[f"{k}"] += v / nsteps
     return dict(metrics)
 
 
@@ -102,10 +103,18 @@ def main(cfg: MainConfig) -> None:
     if torch.cuda.is_available():
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
+
+    eval_func = partial(
+        eval_model, model=model, metrics_func=compute_regression_metrics, nsteps=cfg.metric_iter
+    )
     with SummaryWriter("TB") as sw:
         run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, sw)
         hparams = get_selected_params(cfg)
-        metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
+        train_metrics = eval_func(ldr=train_ldr, desc="Evaluating model on train")
+        test_metrics = eval_func(ldr=test_ldr, desc="Evaluating model on test")
+        metrics = flatten_dict({"train": train_metrics, "test": test_metrics}, sep="/")
+
+        log.info("Final metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
         options = {"debug": [True, False]}
         sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
         add_model_weights_figure(model, X, info.mne_info, sw, cfg)

@@ -32,7 +32,7 @@ def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dic
     speech_idx = detect_voice(y_true)
 
     metrics = {}
-    metrics["correlation"] = np.nanmean(corr_multiple(y_predicted, y_true))
+    metrics["correlation"] = float(np.nanmean(corr_multiple(y_predicted, y_true)))
 
     if speech_idx is not None:
         y_predicted, y_true = y_predicted[speech_idx], y_true[speech_idx]

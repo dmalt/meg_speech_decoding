@@ -58,10 +58,10 @@ ParamsDict = dict[str, SimpleType]
 def get_selected_params(cfg: MainConfig) -> ParamsDict:
     dict_conf = OmegaConf.to_container(cfg)
     assert isinstance(dict_conf, dict)
-    return _flatten_dict(dict_conf)
+    return flatten_dict(dict_conf)
 
 
-def _flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = ".") -> ParamsDict:
+def flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = ".") -> ParamsDict:
     return dict(_flatten_dict_gen(d, parent_key, sep))
 
 
