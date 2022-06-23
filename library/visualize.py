@@ -7,7 +7,7 @@ import mne  # type: ignore
 import numpy as np  # type: ignore
 import sklearn.preprocessing as skp  # type: ignore
 
-from .datasets import ContinuousDataset
+from .torch_datasets import Continuous
 
 PLOT_CFG = dict(
     weights=dict(color="k", marker="."),
@@ -35,17 +35,16 @@ class TopoVisualizer:
     def __init__(self, info: MneInfoWithLayout):
         self.info = info
 
-    def __call__(self, ax, t, style=None):
+    def __call__(self, ax, t, style: str | None = None):
         tt = skp.minmax_scale(np.abs(t))
-        print(type(ax))
 
         if len(tt) == 306:
-            meg_idx = mne.pick_types(self.info, meg="mag")
+            meg_idx = mne.pick_types(self.info, meg="mag")  # pyright: ignore
             info = mne.pick_info(self.info, sel=meg_idx)
             tt = (tt[::3] + tt[1::3] + tt[2::3]) / 3
             mne.viz.plot_topomap(tt, info, axes=ax, show=False)
         elif len(tt) == 102:
-            meg_idx = mne.pick_types(self.info, meg="mag")
+            meg_idx = mne.pick_types(self.info, meg="mag")  # pyright: ignore
             info = mne.pick_info(self.info, sel=meg_idx)
             mne.viz.plot_topomap(tt, info, axes=ax, show=False)
 

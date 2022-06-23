@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -6,19 +5,7 @@ import numpy.typing as npt
 import torch
 import torch.nn as nn
 
-
-@dataclass
-class SimpleNetConfig:
-    in_channels: int
-    out_channels: int
-    lag_backward: int
-    lag_forward: int
-    use_lstm: bool
-    downsampling: int
-    hidden_channels: int
-    filtering_size: int
-    envelope_size: int
-    fc_hidden_features: int
+from .config_schema import SimpleNetConfig
 
 
 class SimpleNet(nn.Module):

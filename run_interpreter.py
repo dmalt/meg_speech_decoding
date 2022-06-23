@@ -5,7 +5,9 @@ import setup_utils  # type: ignore # noqa
 import torch  # type: ignore
 from hydra import compose, initialize  # type: ignore
 from hydra.utils import instantiate  # type: ignore
+
 from library.interpreter import ModelInterpreter
+from library.torch_datasets import Composite, Continuous
 from library.visualize import (
     ContinuousDatasetPlotter,
     InterpretPlotLayout,
@@ -13,7 +15,6 @@ from library.visualize import (
     plot_spatial_as_line,
     plot_temporal_as_line,
 )
-from ndp.datasets import CompositeDataset, ContinuousDataset
 
 setup_utils.setup_hydra()
 
@@ -32,7 +33,7 @@ cfg = compose(config_name="config")
 
 model = instantiate(cfg.model.regression)
 model.load_state_dict(torch.load(MODEL_PATH))
-dataset: ContinuousDataset = instantiate(cfg.dataset)
+dataset: Continuous = instantiate(cfg.dataset)
 
 plotter = ContinuousDatasetPlotter(dataset)
 plotter.plot(highpass=50)

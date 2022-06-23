@@ -1,7 +1,8 @@
+from collections.abc import MutableMapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generator, Union
 
-from library.models_regression import SimpleNetConfig
+from omegaconf.omegaconf import OmegaConf
 
 
 @dataclass
@@ -17,6 +18,20 @@ class DatasetConfig:
     transform_x: Any
     transform_y: Any
     type: str
+
+
+@dataclass
+class SimpleNetConfig:
+    in_channels: int
+    out_channels: int
+    lag_backward: int
+    lag_forward: int
+    use_lstm: bool
+    downsampling: int
+    hidden_channels: int
+    filtering_size: int
+    envelope_size: int
+    fc_hidden_features: int
 
 
 @dataclass
@@ -36,10 +51,35 @@ class MainConfig:
     learning_rate: float
 
 
-def get_selected_params(cfg: MainConfig) -> dict[str, Any]:
-    return dict(
-        n_steps=cfg.n_steps,
-        lag_backward=cfg.lag_backward,
-        lag_forward=cfg.lag_forward,
-        target_features_cnt=cfg.target_features_cnt,
-    )
+SimpleType = Union[int, float, bool, str]
+ParamsDict = dict[str, SimpleType]
+
+
+def get_selected_params(cfg: MainConfig) -> ParamsDict:
+    dict_conf = OmegaConf.to_container(cfg)
+    assert isinstance(dict_conf, dict)
+    return _flatten_dict(dict_conf)
+
+
+def _flatten_dict(d: MutableMapping, parent_key: str = "", sep: str = ".") -> ParamsDict:
+    return dict(_flatten_dict_gen(d, parent_key, sep))
+
+
+KeyValueGenerator = Generator[tuple[str, SimpleType], None, None]
+
+
+def _flatten_dict_gen(d: MutableMapping, parent_key: str, sep: str) -> KeyValueGenerator:
+    """
+    Modified from
+    https://www.freecodecamp.org/news/how-to-flatten-a-dictionary-in-python-in-4-different-ways/
+
+    """
+    for k, v in d.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, MutableMapping):
+            yield from _flatten_dict_gen(v, new_key, sep=sep)
+        else:
+            # Complex types are not supported by tensorboard hparams
+            if type(v) not in (int, float, str, bool):
+                v = str(v)
+            yield new_key, v

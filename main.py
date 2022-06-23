@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any
 
 import hydra
+import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 import numpy.typing as npt
 import torch
@@ -18,9 +19,11 @@ from tqdm import trange  # type: ignore
 from library import git_utils, main_utils
 from library.config_schema import MainConfig, get_selected_params
 from library.func_utils import log_execution_time
+from library.interpreter import ModelInterpreter
 from library.models_regression import SimpleNet
 from library.runner import TrainTestLoopRunner, compute_regression_metrics, run_experiment
 from library.torch_datasets import Continuous
+from library.visualize import InterpretPlotLayout, TopoVisualizer, plot_temporal_as_line
 
 log = logging.getLogger(__name__)
 main_utils.setup_hydra()
@@ -66,10 +69,11 @@ def main(cfg: MainConfig) -> None:
     log.debug(f"Current working directory is {os.getcwd()}")
     if cfg.debug:
         main_utils.print_config(cfg)
+        main_utils.set_debug_level()
     main_utils.create_dirs()
     git_utils.dump_commit_hash(cfg.debug)
 
-    X, Y, _ = read_data(cfg)
+    X, Y, info = read_data(cfg)
     log.info(f"Loaded X: {str(X)}\nLoaded Y: {str(Y)}")
     train_ldr, test_ldr = create_data_loaders(X, Y, cfg)
 
@@ -82,6 +86,23 @@ def main(cfg: MainConfig) -> None:
 
     metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
     tracker.add_hparams(get_selected_params(cfg), metrics)
+
+    mi = ModelInterpreter(model, X)
+    freqs, weights, patterns = mi.get_temporal(nperseg=1000)
+    sp = mi.get_spatial_patterns()
+    sp_naive = mi.get_naive()
+    plot_topo = TopoVisualizer(info.mne_info)
+    pp = InterpretPlotLayout(cfg.model.hidden_channels, plot_topo, plot_temporal_as_line)
+
+    pp.FREQ_XLIM = 150
+    pp.add_temporal(freqs, weights, "weights")
+    pp.add_temporal(freqs, patterns, "patterns")
+    pp.add_spatial(sp, "patterns")
+    pp.add_spatial(sp_naive, "naive")
+    pp.finalize()
+    plt.switch_backend('agg')
+    tracker.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=pp.fig)
+    tracker.close()
 
 
 if __name__ == "__main__":

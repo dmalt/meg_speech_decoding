@@ -3,6 +3,7 @@ import numpy.typing as npt
 import torch
 
 SignalArray32_T = npt.NDArray[np.float32]  # array of shape (n_sensors, n_samples)
+SignalArray32 = npt.NDArray[np.float32]  # array of shape (n_sensors, n_samples)
 
 # TODO: check batch shape. Maybe sensors and samples should be swapped
 

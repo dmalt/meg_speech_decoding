@@ -20,7 +20,7 @@ def setup_hydra() -> None:
 
 
 def set_debug_level() -> None:
-    for logger_name in logging.root.manager.loggerDict:
+    for logger_name in filter(lambda x: x.startswith("library"), logging.root.manager.loggerDict):
         logging.getLogger(logger_name).setLevel(logging.DEBUG)
 
 
