@@ -25,10 +25,9 @@ def set_debug_level() -> None:
 
 
 def create_dirs() -> None:
-    for dir_name in ["results", "model_dumps"]:
-        if not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-            log.debug(f"{dir_name} dir created")
+    if not os.path.isdir("model_dumps"):
+        os.makedirs("model_dumps")
+        log.debug("model_dumps dir created")
 
 
 def dump_environment() -> None:
