@@ -64,6 +64,25 @@ def get_final_metrics(model, train_ldr, test_ldr, nsteps: int) -> dict[str, floa
 
 
 @log_execution_time()
+def add_model_weights_figure(model, X, mne_info, tracker, cfg: MainConfig) -> None:  # type: ignore
+    mi = ModelInterpreter(model, X)
+    freqs, weights, patterns = mi.get_temporal(nperseg=1000)
+    sp = mi.get_spatial_patterns()
+    sp_naive = mi.get_naive()
+    plot_topo = TopoVisualizer(mne_info)
+    pp = InterpretPlotLayout(cfg.model.hidden_channels, plot_topo, plot_temporal_as_line)
+
+    pp.FREQ_XLIM = 150
+    pp.add_temporal(freqs, weights, "weights")
+    pp.add_temporal(freqs, patterns, "patterns")
+    pp.add_spatial(sp, "patterns")
+    pp.add_spatial(sp_naive, "naive")
+    pp.finalize()
+    plt.switch_backend("agg")
+    tracker.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=pp.fig)
+
+
+@log_execution_time()
 @hydra.main(config_path="./configs", config_name="config")
 def main(cfg: MainConfig) -> None:
     log.debug(f"Current working directory is {os.getcwd()}")
@@ -81,32 +100,13 @@ def main(cfg: MainConfig) -> None:
     if torch.cuda.is_available():
         model = model.cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
-    tracker = SummaryWriter("TB")  # type: ignore
-    run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, tracker)
-
-    tracker.add_hparams(
-        get_selected_params(cfg),
-        get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter),
-        hparam_domain_discrete={"debug": [True, False]},
-        run_name="hparams",
-    )
-
-    mi = ModelInterpreter(model, X)
-    freqs, weights, patterns = mi.get_temporal(nperseg=1000)
-    sp = mi.get_spatial_patterns()
-    sp_naive = mi.get_naive()
-    plot_topo = TopoVisualizer(info.mne_info)
-    pp = InterpretPlotLayout(cfg.model.hidden_channels, plot_topo, plot_temporal_as_line)
-
-    pp.FREQ_XLIM = 150
-    pp.add_temporal(freqs, weights, "weights")
-    pp.add_temporal(freqs, patterns, "patterns")
-    pp.add_spatial(sp, "patterns")
-    pp.add_spatial(sp_naive, "naive")
-    pp.finalize()
-    plt.switch_backend("agg")
-    tracker.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=pp.fig)
-    tracker.close()
+    with SummaryWriter("TB") as sw:
+        run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, sw)
+        hparams = get_selected_params(cfg)
+        metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
+        options = {"debug": [True, False]}
+        sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
+        add_model_weights_figure(model, X, info.mne_info, sw, cfg)
 
 
 if __name__ == "__main__":
