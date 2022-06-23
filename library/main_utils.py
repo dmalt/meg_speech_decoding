@@ -31,6 +31,13 @@ def create_dirs() -> None:
             log.debug(f"{dir_name} dir created")
 
 
+def dump_environment() -> None:
+    env = os.popen("conda env export").read()
+    assert env.startswith("name")
+    with open("enironment_dump.yml", "w") as f:
+        f.write(env)
+
+
 def print_config(cfg: MainConfig) -> None:
     OmegaConf.resolve(cfg)  # type: ignore
     log.debug(OmegaConf.to_yaml(cfg))

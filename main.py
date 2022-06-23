@@ -91,6 +91,7 @@ def main(cfg: MainConfig) -> None:
         main_utils.print_config(cfg)
         main_utils.set_debug_level()
     main_utils.create_dirs()
+    main_utils.dump_environment()
     git_utils.dump_commit_hash(cfg.debug)
 
     X, Y, info = read_data(cfg)
