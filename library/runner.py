@@ -123,11 +123,11 @@ def run_experiment(
     tr = trange(n_steps, desc="Experiment main loop")
     for i, (m_train, l_train), (m_test, l_test) in zip(tr, train_loop, test_loop):
         for tag, value in m_train.items():
-            experiment_tracker.add_scalar(f"train/{tag}", value, i)
-        experiment_tracker.add_scalar("train/loss", l_train, i)
+            experiment_tracker.add_scalar(f"ongoing_train/{tag}", value, i)
+        experiment_tracker.add_scalar("ongoing_train/loss", l_train, i)
         for tag, value in m_test.items():
-            experiment_tracker.add_scalar(f"test/{tag}", value, i)
-        experiment_tracker.add_scalar("test/loss", l_test, i)
+            experiment_tracker.add_scalar(f"ongoing_test/{tag}", value, i)
+        experiment_tracker.add_scalar("ongoing_test/loss", l_test, i)
 
         metrics_tracker.update_buffer(np.array([v for v in m_test.values()]))
         if not i % upd_steps_freq and metrics_tracker.is_improved():

@@ -57,9 +57,9 @@ def get_final_metrics(model, train_ldr, test_ldr, nsteps: int) -> dict[str, floa
         tr = trange(nsteps, desc=f"Best model evaluation loop: {stage}")
         for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
             m = compute_regression_metrics(y_pred, y_true)
-            metrics[f"{stage}_corr"] += m["correlation"] / nsteps
-            metrics[f"{stage}_corr_speech"] += m["correlation_speech"] / nsteps
-            metrics[f"{stage}_loss"] += l / nsteps
+            metrics[f"{stage}/corr"] += m["correlation"] / nsteps
+            metrics[f"{stage}/corr_speech"] += m["correlation_speech"] / nsteps
+            metrics[f"{stage}/loss"] += l / nsteps
     return dict(metrics)
 
 
@@ -84,8 +84,12 @@ def main(cfg: MainConfig) -> None:
     tracker = SummaryWriter("TB")  # type: ignore
     run_experiment(model, optimizer, train_ldr, test_ldr, cfg.n_steps, cfg.model_upd_freq, tracker)
 
-    metrics = get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter)
-    tracker.add_hparams(get_selected_params(cfg), metrics)
+    tracker.add_hparams(
+        get_selected_params(cfg),
+        get_final_metrics(model, train_ldr, test_ldr, cfg.metric_iter),
+        hparam_domain_discrete={"debug": [True, False]},
+        run_name="hparams",
+    )
 
     mi = ModelInterpreter(model, X)
     freqs, weights, patterns = mi.get_temporal(nperseg=1000)
@@ -100,7 +104,7 @@ def main(cfg: MainConfig) -> None:
     pp.add_spatial(sp, "patterns")
     pp.add_spatial(sp_naive, "naive")
     pp.finalize()
-    plt.switch_backend('agg')
+    plt.switch_backend("agg")
     tracker.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=pp.fig)
     tracker.close()
 
