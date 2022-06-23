@@ -51,6 +51,7 @@ def create_data_loaders(
     return train_ldr, test_ldr
 
 
+@log_execution_time("collecting best model metrics")
 def get_final_metrics(model, train_ldr, test_ldr, nsteps: int) -> dict[str, float]:  # type: ignore
     metrics = defaultdict(lambda: 0.0)  # type: ignore
     for stage, ldr in (("train", train_ldr), ("test", test_ldr)):
