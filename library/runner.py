@@ -23,9 +23,11 @@ def detect_voice(y_batch: SignalBatch, thresh: float = 1) -> npt.NDArray[np.bool
     return np.sum(y_batch > thresh, axis=1) > int(n_channels * 0.25)
 
 
-def corr_multiple(x: SignalBatch, y: ChanBatch) -> list[Any]:
-    assert x.shape[1] == y.shape[1], f"{x.shape=}, {y.shape=}"
-    return [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
+def corr_multiple(x: ChanBatch, y: ChanBatch) -> list[Any]:
+    assert x.shape == y.shape, f"{x.shape=}, {y.shape=}"
+    res = [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
+    # log.debug(f"corr_multiple_res={res}, {x.shape=}, {y.shape=}")
+    return res
 
 
 def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
@@ -36,7 +38,9 @@ def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dic
 
     if speech_idx is not None:
         y_predicted, y_true = y_predicted[speech_idx], y_true[speech_idx]
-        metrics["correlation_speech"] = float(np.nanmean(corr_multiple(y_predicted, y_true)))
+        corr_speech = corr_multiple(y_predicted, y_true)
+        # log.debug(f"compute_regression_metrics: {corr_speech=}, {len(corr_speech)=}")
+        metrics["correlation_speech"] = float(np.nanmean(corr_speech))
     else:
         metrics["correlation_speech"] = 0
 
@@ -130,10 +134,15 @@ def run_experiment(
         experiment_tracker.add_scalar("ongoing_test/loss", l_test, i)
 
         metrics_tracker.update_buffer(np.array([v for v in m_test.values()]))
-        if not i % upd_steps_freq and metrics_tracker.is_improved():
-            metrics_tracker.update_best()
-            log.info(f"Dumping model for iteration = {i}")
-            torch.save(model.state_dict(), model_path)
+        if not i % upd_steps_freq:
+            if metrics_tracker.is_improved():
+                metrics_tracker.update_best()
+                log.info(f"Dumping model for iteration = {i}")
+                torch.save(model.state_dict(), model_path)
+            else:
+                log.debug(f"{metrics_tracker.best_metrics=}")
+                log.debug(f"{metrics_tracker.get_smoothed_metrics()=}")
+                log.debug(f"{metrics_tracker.metrics_buffer=}")
 
     if metrics_tracker.is_improved():
         torch.save(model.state_dict(), model_path)

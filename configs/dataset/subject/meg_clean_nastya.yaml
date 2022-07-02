@@ -1,0 +1,6 @@
+defaults:
+    - meg_subject_config
+raw_path: "${oc.env:MEG_DATA}/08-resample/sub-02/sub-02_task-overtcovert_proc-resample_meg.fif"
+audio_path: "${oc.env:MEG_DATA}/07-align_speech/sub-02_proc-align_beh.wav"
+annotations_path: "${oc.env:MEG_DATA}/06-annotate_muscles/sub-02/sub-02_task-overtcovert_proc-badseg_annot.fif"
+

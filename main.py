@@ -47,8 +47,8 @@ def create_data_loaders(
 ) -> tuple[DataLoader, DataLoader]:
     dataset = Continuous(np.asarray(X), np.asarray(Y), cfg.lag_backward, cfg.lag_forward)
     train, test = dataset.train_test_split(cfg.train_test_ratio)
-    train_ldr = DataLoader(train, batch_size=cfg.batch_size, shuffle=True)
-    test_ldr = DataLoader(test, batch_size=cfg.batch_size, shuffle=True)
+    train_ldr = DataLoader(train, batch_size=cfg.batch_size, shuffle=True, drop_last=True)
+    test_ldr = DataLoader(test, batch_size=cfg.batch_size, shuffle=True, drop_last=True)
     return train_ldr, test_ldr
 
 
@@ -89,8 +89,8 @@ def add_model_weights_figure(model, X, mne_info, tracker, cfg: MainConfig) -> No
 def main(cfg: MainConfig) -> None:
     log.debug(f"Current working directory is {os.getcwd()}")
     if cfg.debug:
-        main_utils.print_config(cfg)
         main_utils.set_debug_level()
+        main_utils.print_config(cfg)
     main_utils.create_dirs()
     main_utils.dump_environment()
     git_utils.dump_commit_hash(cfg.debug)
