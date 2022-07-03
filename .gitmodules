@@ -1,0 +1,3 @@
+[submodule "neural_data_preprocessing"]
+	path = neural_data_preprocessing
+	url = ../neural_data_preprocessing
