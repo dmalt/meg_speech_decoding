@@ -1,7 +1,7 @@
 defaults:
     - meg_subject_config
-raw_path: "${oc.env:MEG_DATA}/05-apply_ica/sub-01/sub-01_task-speech_proc-icaclean_meg.fif"
-# raw_path: "${oc.env:MEG_DATA}/08-resample/sub-01/sub-01_task-speech_proc-resample_meg.fif"
-audio_path: "${oc.env:MEG_DATA}/07-align_speech/sub-01_proc-align_beh.wav"
-annotations_path: "${oc.env:MEG_DATA}/06-annotate_muscles/sub-01/sub-01_task-speech_proc-badseg_annot.fif"
+# raw_path: "${oc.env:MEG_DATA}/061-apply_ica/sub-01/sub-01_task-speech_proc-ica_meg.fif"
+raw_path: "${oc.env:MEG_DATA}/091-resample/sub-01/sub-01_task-speech_proc-resample_meg.fif"
+audio_path: "${oc.env:MEG_DATA}/081-align_audio/sub-01/sub-01_task-speech_proc-align_beh.wav"
+annotations_path: "${oc.env:MEG_DATA}/071-annotate_muscles/sub-01/sub-01_task-speech_proc-ica_annot.fif"
 

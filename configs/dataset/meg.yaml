@@ -18,6 +18,6 @@ transform_x:
   selected_channels: ${selected_channels}
 transform_y:
   _target_: library.transformers.MelspectrogramPipeline
-  dsamp_coef: 22
+  dsamp_coef: 44
   n_mels: ${target_features_cnt}
   f_max: 2000
