@@ -139,10 +139,6 @@ def run_experiment(
                 metrics_tracker.update_best()
                 log.info(f"Dumping model for iteration = {i}")
                 torch.save(model.state_dict(), model_path)
-            else:
-                log.debug(f"{metrics_tracker.best_metrics=}")
-                log.debug(f"{metrics_tracker.get_smoothed_metrics()=}")
-                log.debug(f"{metrics_tracker.metrics_buffer=}")
 
     if metrics_tracker.is_improved():
         torch.save(model.state_dict(), model_path)
