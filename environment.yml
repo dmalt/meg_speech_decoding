@@ -21,4 +21,4 @@ dependencies:
   - mypy
   - pytest
 variables:
-    MEG_DATA: "/home/altukhov/Data/speech/rawdata/derivatives/"
+    MEG_DATA: "/home/altukhov/Data/speech_meg/rawdata/derivatives/"
