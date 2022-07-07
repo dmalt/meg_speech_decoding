@@ -4,14 +4,15 @@ defaults:
   - model: simple_no_lstm
   - _self_
 
-lag_backward: 1000       # number of samples before the target sound sample
+# lag_backward: 1000       # number of samples before the target sound sample
+lag_backward: 500       # number of samples before the target sound sample
 lag_forward: 0        # number of samples after the target sound sample
 target_features_cnt: 20  # e.g. n_mels for melspectrogram
 selected_channels: ${python_range:"range(0, 306, 3)"}
 debug: false
 
 batch_size: 100
-n_steps: 8000
+n_steps: 20000
 metric_iter: 250
 model_upd_freq: 250
 train_test_ratio: 0.6
