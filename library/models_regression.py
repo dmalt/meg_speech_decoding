@@ -22,7 +22,7 @@ class SimpleNet(nn.Module):
         assert window_size > cfg.filtering_size
         assert window_size > cfg.envelope_size
 
-        self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, 1)
+        self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, kernel_size=1)
         self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(cfg.hidden_channels, affine=False)
         self.detector = self._create_envelope_detector(cfg.hidden_channels)
         self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)

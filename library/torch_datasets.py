@@ -38,7 +38,7 @@ class Continuous(Dataset[tuple[SignalArray32_T, ChannelsVector32]]):
 
     def __post_init__(self) -> None:
         assert self.X.dtype == np.float32
-        assert self.Y.dtype == np.float32
+        # assert self.Y.dtype == np.float32
         assert len(self.X) == len(self.Y)
 
     def __len__(self) -> int:

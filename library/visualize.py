@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from typing import Optional
 
+import matplotlib
+import matplotlib.figure as mpl_fig
 import matplotlib.pyplot as plt  # type: ignore
 import mne  # type: ignore
 import numpy as np  # type: ignore
-import sklearn.preprocessing as skp  # type: ignore
+import sklearn.preprocessing as skp
+
+from library.func_utils import log_execution_time
+from library.interpreter import ModelInterpreter  # type: ignore
 
 from .torch_datasets import Continuous
 
@@ -123,3 +128,24 @@ class ContinuousDatasetPlotter:
         else:
             raw = self.raw
         raw.plot(block=True, highpass=highpass, lowpass=lowpass)
+
+
+@log_execution_time()
+def get_model_weights_figure(model, X, mne_info, n_branches: int) -> mpl_fig.Figure:  # type: ignore
+    mi = ModelInterpreter(model, X)
+    freqs, weights, patterns = mi.get_temporal(nperseg=1000)
+    sp = mi.get_spatial_patterns()
+    sp_naive = mi.get_naive()
+    plot_topo = TopoVisualizer(mne_info)
+    pp = InterpretPlotLayout(n_branches, plot_topo, plot_temporal_as_line)
+
+    pp.FREQ_XLIM = 150
+    pp.add_temporal(freqs, weights, "weights")
+    pp.add_temporal(freqs, patterns, "patterns")
+    pp.add_spatial(sp, "patterns")
+    pp.add_spatial(sp_naive, "naive")
+    pp.finalize()
+    plt.switch_backend("agg")
+    return pp.fig
+
+

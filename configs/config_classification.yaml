@@ -1,0 +1,23 @@
+defaults:
+  - config_schema
+  - dataset: meg_classif
+  - model: simple_no_lstm
+  - _self_
+
+# lag_backward: 1000       # number of samples before the target sound sample
+lag_backward: 500       # number of samples before the target sound sample
+lag_forward: 0        # number of samples after the target sound sample
+target_features_cnt: 1  # e.g. n_mels for melspectrogram
+selected_channels: ${python_range:"range(0, 306, 3)"}
+debug: false
+
+batch_size: 500
+n_steps: 10000
+metric_iter: 250
+model_upd_freq: 250
+train_test_ratio: 0.6
+learning_rate: 0.0003
+
+hydra:
+  run:
+    dir: outputs/classif/debug:${debug}/${dataset.type}/${now:%Y-%m-%d_%H-%M-%S}

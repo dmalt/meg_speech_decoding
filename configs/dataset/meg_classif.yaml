@@ -1,0 +1,18 @@
+defaults:
+  - dataset_schema
+  - subject: meg_clean
+  # - subject: meg_clean_nastya
+  - _self_
+
+type: MEG
+
+read:
+  _target_: ndp.datasets.speech_meg.read
+  subject: ${..subject}
+
+transform_x:
+  _target_: library.transformers.MegPipeline
+  l_freq: 10
+  h_freq: 120
+  notch_freqs: []
+  selected_channels: ${selected_channels}

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
-from collections import deque
-from typing import Any, Callable, Deque, Generator, Protocol
+from collections import defaultdict, deque
+from typing import Any, Callable, DefaultDict, Deque, Generator, Protocol
 
 import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score, precision_score, recall_score
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
@@ -47,7 +48,35 @@ def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dic
     return metrics
 
 
+def compute_classification_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
+    y_pred_tag = torch.round(torch.sigmoid(torch.from_numpy(y_predicted))).numpy()
+    res = dict(
+        accuracy=float(np.sum(y_pred_tag == y_true) / y_true.size),
+        f1=float(f1_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
+        precision=float(precision_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
+        recall=float(recall_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
+    )
+    return res
+
+
 LossFunction = Callable[[ChanBatchTensor, ChanBatchTensor], torch.Tensor]
+
+
+@log_execution_time("collecting best model metrics")
+def eval_model(
+    model: torch.nn.Module,
+    ldr: DataLoader,
+    metrics_func: Callable,
+    nsteps: int,
+    tqdm_desc: str = "",
+) -> dict[str, float]:
+    metrics: DefaultDict[str, float] = defaultdict(lambda: 0.0)
+    tr = trange(nsteps, desc=tqdm_desc)
+    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
+        metrics["loss"] += l / nsteps
+        for k, v in metrics_func(y_pred, y_true).items():
+            metrics[f"{k}"] += v / nsteps
+    return dict(metrics)
 
 
 class TrainTestLoopRunner:
@@ -55,8 +84,8 @@ class TrainTestLoopRunner:
         self,
         model: nn.Module,
         loader: DataLoader,
+        loss_function: LossFunction,
         optimizer: Optimizer | None = None,
-        loss_function: LossFunction = nn.MSELoss(),
     ):
         self.model = model
         self.data_loader = loader
@@ -101,6 +130,10 @@ class ScalarTracker(Protocol):
 MetricsComputer = Callable[[ChanBatch, ChanBatch], dict[str, float]]
 
 
+weights = torch.ones([1])
+weights[0] /= 0.5
+
+
 @log_execution_time(desc="the experiment")
 def run_experiment(
     model: nn.Module,
@@ -110,7 +143,8 @@ def run_experiment(
     n_steps: int,
     upd_steps_freq: int,
     experiment_tracker: ScalarTracker,
-    compute_metrics: MetricsComputer = compute_regression_metrics,
+    compute_metrics: MetricsComputer,
+    loss: LossFunction,
 ) -> None:
 
     model_filename = f"{model.__class__.__name__}"
@@ -122,8 +156,10 @@ def run_experiment(
         y_predicted, y_true, loss = args
         return compute_metrics(y_predicted, y_true), loss
 
-    train_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, train_loader, optimizer)))
-    test_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, test_loader)))
+    train_loop = map(
+        to_metrics, infinite(TrainTestLoopRunner(model, train_loader, loss, optimizer))
+    )
+    test_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, test_loader, loss)))
     tr = trange(n_steps, desc="Experiment main loop")
     for i, (m_train, l_train), (m_test, l_test) in zip(tr, train_loop, test_loop):
         for tag, value in m_train.items():
@@ -161,7 +197,7 @@ class BestMetricsTracker:
         if self.best_metrics is None:
             return True
         smoothed_metrics = self.get_smoothed_metrics()
-        return bool(np.all(smoothed_metrics >= self.best_metrics))
+        return bool(np.sum(smoothed_metrics) >= np.sum(self.best_metrics))
 
     def update_best(self) -> None:
         self.best_metrics = self.get_smoothed_metrics()
