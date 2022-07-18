@@ -1,3 +1,6 @@
 [submodule "neural_data_preprocessing"]
 	path = neural_data_preprocessing
 	url = ../neural_data_preprocessing
+[submodule "speech_meg"]
+	path = speech_meg
+	url = git@github.com:dmalt/speech_meg.git
