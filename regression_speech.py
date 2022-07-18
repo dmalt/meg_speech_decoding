@@ -52,7 +52,7 @@ def create_data_loaders(
 
 
 @log_execution_time()
-@hydra.main(config_path="./configs", config_name="config")
+@hydra.main(config_path="./configs", config_name="regression_speech_config")
 def main(cfg: MainConfig) -> None:
     GlobalHydra.instance().clear()
     log.debug(f"Current working directory is {os.getcwd()}")

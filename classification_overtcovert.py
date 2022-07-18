@@ -2,7 +2,6 @@ import logging
 import os
 import os.path
 from functools import partial, reduce
-from pathlib import Path
 from typing import Any
 
 import hydra
@@ -12,7 +11,7 @@ import numpy.typing as npt
 import torch
 import torch.nn as nn
 from hydra.core.global_hydra import GlobalHydra
-from hydra.utils import get_original_cwd, instantiate
+from hydra.utils import instantiate
 from ndp.signal import Signal
 from ndp.signal.pipelines import SignalProcessor
 from torch.utils.data import DataLoader
@@ -33,10 +32,9 @@ main_utils.setup_hydra()
 
 
 @log_execution_time(desc="reading and transforming data")
-def read_data(cfg: MainConfig) -> tuple[Signal[npt._32Bit], Any]:
-    # X, _, info = call(cfg.dataset.read)
-    X, _, info = speech_meg.read_subject(subject="02")
-    transform_x: SignalProcessor[npt._32Bit] = instantiate(cfg.dataset.transform_x)
+def read_data(transform_x_cfg, subject: str) -> tuple[Signal[npt._32Bit], Any]:
+    X, _, info = speech_meg.read_subject(subject=subject)
+    transform_x: SignalProcessor[npt._32Bit] = instantiate(transform_x_cfg)
     X = transform_x(X)
     assert X.dtype == np.float32
     return X, info
@@ -94,7 +92,7 @@ def add_model_weights_figure(model, X, mne_info, tracker, cfg: MainConfig) -> No
 
 
 @log_execution_time()
-@hydra.main(config_path="./configs", config_name="config_classification")
+@hydra.main(config_path="./configs", config_name="classification_overtcovert_config")
 def main(cfg: MainConfig) -> None:
     GlobalHydra.instance().clear()
     log.debug(f"Current working directory is {os.getcwd()}")
@@ -105,7 +103,7 @@ def main(cfg: MainConfig) -> None:
     main_utils.dump_environment()
     git_utils.dump_commit_hash(cfg.debug)
 
-    X, info = read_data(cfg)
+    X, info = read_data(cfg.dataset.transform_x, cfg.subject)
     log.info(f"Loaded X: {str(X)}")
     train_ldr, test_ldr, covert_test_ldr = create_data_loaders(X, cfg)
 

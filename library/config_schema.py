@@ -49,6 +49,7 @@ class MainConfig:
     model_upd_freq: int
     train_test_ratio: float
     learning_rate: float
+    subject: str
 
 
 SimpleType = Union[int, float, bool, str]

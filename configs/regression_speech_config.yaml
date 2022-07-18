@@ -18,6 +18,8 @@ model_upd_freq: 250
 train_test_ratio: 0.6
 learning_rate: 0.0003
 
+subject: "01"
+
 hydra:
   run:
     dir: outputs/debug:${debug}/${dataset.type}/${now:%Y-%m-%d_%H-%M-%S}
