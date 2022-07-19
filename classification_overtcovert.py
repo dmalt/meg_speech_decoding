@@ -1,16 +1,13 @@
 import logging
 import os
-import os.path
 from functools import partial, reduce
 from typing import Any
 
 import hydra
-import matplotlib.pyplot as plt  # type: ignore
 import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
-from hydra.core.global_hydra import GlobalHydra
 from hydra.utils import instantiate
 from ndp.signal import Signal
 from ndp.signal.pipelines import SignalProcessor
@@ -18,21 +15,20 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 
 import speech_meg  # type: ignore
-from library import git_utils, main_utils
+from library import main_utils
 from library.config_schema import MainConfig, flatten_dict, get_selected_params
 from library.func_utils import log_execution_time
-from library.interpreter import ModelInterpreter
 from library.models_regression import SimpleNet
 from library.runner import compute_classification_metrics, eval_model, run_experiment
 from library.torch_datasets import Continuous
-from library.visualize import InterpretPlotLayout, TopoVisualizer, plot_temporal_as_line
+from library.visualize import get_model_weights_figure
 
 log = logging.getLogger(__name__)
 main_utils.setup_hydra()
 
 
 @log_execution_time(desc="reading and transforming data")
-def read_data(transform_x_cfg, subject: str) -> tuple[Signal[npt._32Bit], Any]:
+def read_data(transform_x_cfg: Any, subject: str) -> tuple[Signal[npt._32Bit], Any]:
     X, _, info = speech_meg.read_subject(subject=subject)
     transform_x: SignalProcessor[npt._32Bit] = instantiate(transform_x_cfg)
     X = transform_x(X)
@@ -40,68 +36,41 @@ def read_data(transform_x_cfg, subject: str) -> tuple[Signal[npt._32Bit], Any]:
     return X, info
 
 
-def create_data_loaders(
-    X: Signal[npt._32Bit], cfg: MainConfig
-) -> tuple[DataLoader, DataLoader, DataLoader]:
-    covert_annot_masks = (a.as_mask(X.sr, len(X)) for a in X.annotations if a.type == "covert")
-    speech_annot_masks = (a.as_mask(X.sr, len(X)) for a in X.annotations if a.type == "speech")
-    speech_mask = reduce(lambda x, y: np.logical_or(x, y), speech_annot_masks)
-    covert_mask = reduce(lambda x, y: np.logical_or(x, y), covert_annot_masks)
+def get_joint_mask(X: Signal, annot_type: str) -> npt.NDArray[np.bool_]:
+    masks = (a.as_mask(X.sr, len(X)) for a in X.annotations if a.type == annot_type)
+    return reduce(lambda x, y: np.logical_or(x, y), masks)
 
+
+Loaders = tuple[DataLoader, DataLoader, DataLoader]
+
+
+def create_data_loaders(X: Signal[npt._32Bit], cfg: MainConfig) -> Loaders:
+    speech_mask = get_joint_mask(X, "speech")
+    covert_mask = get_joint_mask(X, "covert")
     log.info(f"True class ratio: {np.sum(speech_mask)/len(speech_mask)}")
     log.debug(f"{speech_mask.shape=}, {speech_mask=}")
-    dataset = Continuous(
-        np.asarray(X),
-        np.logical_or(speech_mask, covert_mask)[:, np.newaxis].astype("float32"),
-        cfg.lag_backward,
-        cfg.lag_forward,
-    )
-    dataset_covert = Continuous(
-        np.asarray(X)[np.logical_not(speech_mask), :],
-        covert_mask[np.logical_not(speech_mask), np.newaxis].astype("float32"),
-        cfg.lag_backward,
-        cfg.lag_forward,
-    )
+
+    Y_joint = np.logical_or(speech_mask, covert_mask)[:, np.newaxis].astype("float32")
+    dataset = Continuous(np.asarray(X), Y_joint, cfg.lag_backward, cfg.lag_forward)
+
+    X_no_overt = np.asarray(X)[np.logical_not(speech_mask), :]
+    Y_no_overt = covert_mask[np.logical_not(speech_mask), np.newaxis].astype("float32")
+    dataset_covert = Continuous(X_no_overt, Y_no_overt, cfg.lag_backward, cfg.lag_forward)
+
     train, test = dataset.train_test_split(cfg.train_test_ratio)
     _, test_covert = dataset_covert.train_test_split(cfg.train_test_ratio)
-    train_ldr = DataLoader(train, batch_size=cfg.batch_size, shuffle=True, drop_last=True)
-    test_ldr = DataLoader(test, batch_size=cfg.batch_size, shuffle=True, drop_last=True)
-    covert_test_ldr = DataLoader(
-        test_covert, batch_size=cfg.batch_size, shuffle=True, drop_last=True
-    )
+
+    dl_params = dict(batch_size=cfg.batch_size, shuffle=True, drop_last=True)
+    train_ldr = DataLoader(train, **dl_params)  # type: ignore
+    test_ldr = DataLoader(test, **dl_params)  # type: ignore
+    covert_test_ldr = DataLoader(test_covert, **dl_params)  # type: ignore
     return train_ldr, test_ldr, covert_test_ldr
-
-
-@log_execution_time()
-def add_model_weights_figure(model, X, mne_info, tracker, cfg: MainConfig) -> None:  # type: ignore
-    mi = ModelInterpreter(model, X)
-    freqs, weights, patterns = mi.get_temporal(nperseg=1000)
-    sp = mi.get_spatial_patterns()
-    sp_naive = mi.get_naive()
-    plot_topo = TopoVisualizer(mne_info)
-    pp = InterpretPlotLayout(cfg.model.hidden_channels, plot_topo, plot_temporal_as_line)
-
-    pp.FREQ_XLIM = 150
-    pp.add_temporal(freqs, weights, "weights")
-    pp.add_temporal(freqs, patterns, "patterns")
-    pp.add_spatial(sp, "patterns")
-    pp.add_spatial(sp_naive, "naive")
-    pp.finalize()
-    plt.switch_backend("agg")
-    tracker.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=pp.fig)
 
 
 @log_execution_time()
 @hydra.main(config_path="./configs", config_name="classification_overtcovert_config")
 def main(cfg: MainConfig) -> None:
-    GlobalHydra.instance().clear()
-    log.debug(f"Current working directory is {os.getcwd()}")
-    if cfg.debug:
-        main_utils.set_debug_level()
-        main_utils.print_config(cfg)
-    main_utils.create_dirs()
-    main_utils.dump_environment()
-    git_utils.dump_commit_hash(cfg.debug)
+    main_utils.prepare_script(log, cfg)
 
     X, info = read_data(cfg.dataset.transform_x, cfg.subject)
     log.info(f"Loaded X: {str(X)}")
@@ -154,7 +123,8 @@ def main(cfg: MainConfig) -> None:
         log.info("Final metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
         options = {"debug": [True, False]}
         sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
-        add_model_weights_figure(model, X, info.mne_info, sw, cfg)
+        fig = get_model_weights_figure(model, X, info.mne_info, sw, cfg.model.hidden_channels)
+        sw.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=fig)
 
 
 if __name__ == "__main__":

@@ -75,6 +75,7 @@ def main(cfg: MainConfig) -> None:
     eval_func = partial(
         eval_model,
         model=model,
+        loss=nn.MSELoss(),
         metrics_func=compute_regression_metrics,  # -> config
         nsteps=cfg.metric_iter,
     )
@@ -91,14 +92,14 @@ def main(cfg: MainConfig) -> None:
             loss=nn.MSELoss(),  # -> config
         )
         hparams = get_selected_params(cfg)
-        train_metrics = eval_func(ldr=train_ldr, desc="Evaluating model on train")
-        test_metrics = eval_func(ldr=test_ldr, desc="Evaluating model on test")
+        train_metrics = eval_func(ldr=train_ldr, tqdm_desc="Evaluating model on train")
+        test_metrics = eval_func(ldr=test_ldr, tqdm_desc="Evaluating model on test")
         metrics = flatten_dict({"train": train_metrics, "test": test_metrics}, sep="/")
 
         log.info("Final metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
         options = {"debug": [True, False]}
         sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
-        fig = get_model_weights_figure(model, X, info.mne_info, sw, cfg.model.hidden_channels)
+        fig = get_model_weights_figure(model, X, info.mne_info, cfg.model.hidden_channels)
         sw.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=fig)
 
 

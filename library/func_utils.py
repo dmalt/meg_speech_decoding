@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from functools import wraps
 from time import perf_counter
-from typing import Any, Callable, Generator, Iterable, TypeVar
+from typing import Any, Callable, Generator, Generic, Iterable, TypeVar
 
 T = TypeVar("T", covariant=True)
 
@@ -13,6 +13,15 @@ def infinite(x: Iterable[T]) -> Generator[T, None, None]:
         iterator = iter(x)
         for item in iterator:
             yield item
+
+
+class limited(Generic[T]):
+    def __init__(self, x: Iterable[T]):
+        self.x = x
+
+    def by(self, y: Iterable) -> Generator[T, None, None]:
+        for x_out, _ in zip(self.x, y):
+            yield x_out
 
 
 RT = TypeVar("RT")

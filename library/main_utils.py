@@ -2,8 +2,11 @@ import logging
 import os
 
 from hydra.core.config_store import ConfigStore
+from hydra.core.global_hydra import GlobalHydra
 from ndp.datasets.speech_meg import Subject
 from omegaconf import ListConfig, OmegaConf
+
+from library import git_utils
 
 from .config_schema import DatasetConfig, MainConfig
 
@@ -42,3 +45,14 @@ def dump_environment() -> None:
 def print_config(cfg: MainConfig) -> None:
     OmegaConf.resolve(cfg)  # type: ignore
     log.debug(OmegaConf.to_yaml(cfg))
+
+
+def prepare_script(logger: logging.Logger, cfg: MainConfig) -> None:
+    GlobalHydra.instance().clear()
+    logger.debug(f"Current working directory is {os.getcwd()}")
+    if cfg.debug:
+        set_debug_level()
+        print_config(cfg)
+    create_dirs()
+    dump_environment()
+    git_utils.dump_commit_hash(cfg.debug)

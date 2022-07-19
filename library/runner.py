@@ -13,7 +13,7 @@ from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
 
-from library.func_utils import infinite, log_execution_time
+from library.func_utils import infinite, limited, log_execution_time
 from library.type_aliases import ChanBatch, ChanBatchTensor, SigBatchTensor, SignalBatch
 
 log = logging.getLogger(__name__)
@@ -62,24 +62,7 @@ def compute_classification_metrics(y_predicted: ChanBatch, y_true: ChanBatch) ->
 LossFunction = Callable[[ChanBatchTensor, ChanBatchTensor], torch.Tensor]
 
 
-@log_execution_time("collecting best model metrics")
-def eval_model(
-    model: torch.nn.Module,
-    ldr: DataLoader,
-    metrics_func: Callable,
-    nsteps: int,
-    tqdm_desc: str = "",
-) -> dict[str, float]:
-    metrics: DefaultDict[str, float] = defaultdict(lambda: 0.0)
-    tr = trange(nsteps, desc=tqdm_desc)
-    for _, (y_pred, y_true, l) in zip(tr, TrainTestLoopRunner(model, ldr)):
-        metrics["loss"] += l / nsteps
-        for k, v in metrics_func(y_pred, y_true).items():
-            metrics[f"{k}"] += v / nsteps
-    return dict(metrics)
-
-
-class TrainTestLoopRunner:
+class TrainTestLoop:
     def __init__(
         self,
         model: nn.Module,
@@ -89,8 +72,8 @@ class TrainTestLoopRunner:
     ):
         self.model = model
         self.data_loader = loader
-        self.optimizer = optimizer
         self.loss_function = loss_function
+        self.optimizer = optimizer
 
     def __iter__(self) -> Generator[tuple[ChanBatch, ChanBatch, float], None, None]:
         x_batch: SigBatchTensor
@@ -120,6 +103,24 @@ class TrainTestLoopRunner:
             y_predicted = self.model(x)
             loss = self.loss_function(y_predicted, y)
         return y_predicted.cpu().detach().numpy(), float(loss.cpu().detach().numpy())
+
+
+@log_execution_time("collecting best model metrics")
+def eval_model(
+    model: torch.nn.Module,
+    ldr: DataLoader,
+    loss: LossFunction,
+    metrics_func: Callable,
+    nsteps: int,
+    tqdm_desc: str = "",
+) -> dict[str, float]:
+    metrics: DefaultDict[str, float] = defaultdict(lambda: 0.0)
+    tr = trange(nsteps, desc=tqdm_desc)
+    for y_pred, y_true, loss_step in limited(TrainTestLoop(model, ldr, loss)).by(tr):
+        metrics["loss"] += loss_step / nsteps
+        for k, v in metrics_func(y_pred, y_true).items():
+            metrics[f"{k}"] += v / nsteps
+    return dict(metrics)
 
 
 class ScalarTracker(Protocol):
@@ -157,9 +158,9 @@ def run_experiment(
         return compute_metrics(y_predicted, y_true), loss
 
     train_loop = map(
-        to_metrics, infinite(TrainTestLoopRunner(model, train_loader, loss, optimizer))
+        to_metrics, infinite(TrainTestLoop(model, train_loader, loss, optimizer))
     )
-    test_loop = map(to_metrics, infinite(TrainTestLoopRunner(model, test_loader, loss)))
+    test_loop = map(to_metrics, infinite(TrainTestLoop(model, test_loader, loss)))
     tr = trange(n_steps, desc="Experiment main loop")
     for i, (m_train, l_train), (m_test, l_test) in zip(tr, train_loop, test_loop):
         for tag, value in m_train.items():
