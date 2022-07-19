@@ -18,8 +18,9 @@ import speech_meg  # type: ignore
 from library import main_utils
 from library.config_schema import MainConfig, flatten_dict, get_selected_params
 from library.func_utils import log_execution_time
+from library.metrics import compute_classification_metrics
 from library.models_regression import SimpleNet
-from library.runner import compute_classification_metrics, eval_model, run_experiment
+from library.runner import eval_model, run_experiment
 from library.torch_datasets import Continuous
 from library.visualize import get_model_weights_figure
 
