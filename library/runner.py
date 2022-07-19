@@ -8,7 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score  # type: ignore
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
 from tqdm import trange  # type: ignore
