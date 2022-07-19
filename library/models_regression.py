@@ -5,6 +5,8 @@ import numpy.typing as npt
 import torch
 import torch.nn as nn
 
+from library.type_aliases import ChanBatchTensor, SigBatchTensor
+
 from .config_schema import SimpleNetConfig
 
 
@@ -68,7 +70,7 @@ class SimpleNet(nn.Module):
     def get_unmixed_batch(self) -> npt.NDArray[Any]:
         return self._unmixed_channels.cpu().detach().numpy()
 
-    def forward(self, x):
+    def forward(self, x: SigBatchTensor) -> ChanBatchTensor:
         self._unmixed_channels = self.unmixing_layer(x)
         unmix_scaled = self.unmixed_channels_batchnorm(self._unmixed_channels)
         detected_envelopes = self.detector(unmix_scaled)
