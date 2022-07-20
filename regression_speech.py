@@ -31,6 +31,8 @@ main_utils.setup_hydra()
 @log_execution_time(desc="reading and transforming data")
 def prepare_data(cfg: MainConfig) -> tuple[Signal[npt._32Bit], Signal[npt._32Bit], Any]:
     X, Y_, info = speech_meg.read_subject(subject="01")
+    log.debug(f"X before transform: {str(X)}")
+    log.debug(f"Y before transform: {str(Y_)}")
     transform_x: SignalProcessor[npt._32Bit] = instantiate(cfg.dataset.transform_x)
     transform_y: Signal1DProcessor[npt._32Bit] = instantiate(cfg.dataset.transform_y)
     X = transform_x(X)
