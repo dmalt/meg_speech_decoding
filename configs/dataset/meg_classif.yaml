@@ -1,7 +1,5 @@
 defaults:
   - dataset_schema
-  - subject: meg_clean
-  # - subject: meg_clean_nastya
   - _self_
 
 type: MEG

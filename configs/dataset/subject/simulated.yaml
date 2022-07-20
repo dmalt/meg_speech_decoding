@@ -1,7 +1,0 @@
-name: simulated
-sig_len: 2000000
-sen_dim: 5
-src_dim: 4
-noise_dim: 40
-target_lag: 5
-sampling_rate: 1000
