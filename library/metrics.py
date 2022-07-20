@@ -1,76 +1,125 @@
 from __future__ import annotations
 
+import logging
+import operator
+from abc import ABC, abstractmethod
 from collections import deque
-from typing import Any, Deque
+from dataclasses import asdict, astuple, dataclass
+from functools import reduce, total_ordering
+from typing import Any, Deque, Generic, TypeVar
 
 import numpy as np
-import numpy.typing as npt
 import torch
 from sklearn.metrics import f1_score, precision_score, recall_score  # type: ignore
 
-from library.type_aliases import ChanBatch, SignalBatch
+from library.type_aliases import ChanBatch
+
+log = logging.getLogger(__name__)
+
+TMetrics = TypeVar("TMetrics", bound="Metrics")
 
 
-def corr_multiple(x: ChanBatch, y: ChanBatch) -> list[Any]:
-    assert x.shape == y.shape, f"{x.shape=}, {y.shape=}"
-    res = [np.corrcoef(x[:, i], y[:, i], rowvar=False)[0, 1] for i in range(x.shape[1])]
-    # log.debug(f"corr_multiple_res={res}, {x.shape=}, {y.shape=}")
+class Metrics(ABC):
+    """Abstract class implementing metrics conversion to numpy array"""
+
+    @classmethod
+    @abstractmethod
+    def calc(
+        cls: type[TMetrics], y_predicted: ChanBatch, y_true: ChanBatch, bce_with_logit: float
+    ) -> TMetrics:
+        ...
+
+    def __len__(self) -> int:
+        return len(astuple(self))
+
+    def __getitem__(self, ind: int | str) -> float:
+        if isinstance(ind, int):
+            return astuple(self)[ind]
+        elif isinstance(ind, str):
+            return asdict(self)[ind]
+        else:
+            raise IndexError(f"Index must be int or str; got {type(ind)}")
+
+    def __add__(self: TMetrics, other: TMetrics) -> TMetrics:
+        return self.__class__(*[x + y for x, y in zip(self, other)])  # type: ignore
+
+    def __truediv__(self: TMetrics, number: float) -> TMetrics:
+        return self.__class__(*[x / number for x in astuple(self)])  # type: ignore
+
+    @abstractmethod
+    def __lt__(self: TMetrics, other: TMetrics) -> bool:
+        """Which model is better by the set of metrics"""
+
+
+@total_ordering
+@dataclass
+class RegressionMetrics(Metrics):
+    correlation: float
+    mse: float
+
+    @classmethod
+    def calc(cls, y_predicted: ChanBatch, y_true: ChanBatch, mse: float) -> RegressionMetrics:
+        correlation = float(np.nanmean(corr_multiple(y_predicted, y_true)))
+        return cls(correlation, mse)
+
+    def __lt__(self, other: RegressionMetrics) -> bool:
+        return (self.correlation, -self.mse) < (other.correlation, -other.mse)
+
+
+def corr_multiple(y1: ChanBatch, y2: ChanBatch) -> list[Any]:
+    assert y1.shape == y2.shape, f"{y1.shape=}, {y2.shape=}"
+    res = [np.corrcoef(y1[:, i], y2[:, i], rowvar=False)[0, 1] for i in range(y1.shape[1])]
     return res
 
 
-def detect_voice(y_batch: SignalBatch, thresh: float = 1) -> npt.NDArray[np.bool_]:
-    n_channels = y_batch.shape[1]
-    return np.sum(y_batch > thresh, axis=1) > int(n_channels * 0.25)
+@total_ordering
+@dataclass
+class BinaryClassificationMetrics(Metrics):
+    f1_score: float
+    accuracy: float
+    precision: float
+    recall: float
+    bce_with_logit: float
+
+    @classmethod
+    def calc(
+        cls, y_predicted: ChanBatch, y_true: ChanBatch, bce_with_logit: float
+    ) -> BinaryClassificationMetrics:
+        bce_with_logit = bce_with_logit
+        y_pred_tag = torch.round(torch.sigmoid(torch.from_numpy(y_predicted))).numpy()
+        accuracy = float(np.sum(y_pred_tag == y_true) / y_true.size)
+        f1 = float(f1_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
+        precision = float(precision_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
+        recall = float(recall_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
+        return cls(f1, accuracy, precision, recall, bce_with_logit)
+
+    def __lt__(self, other: BinaryClassificationMetrics) -> bool:
+        return (self.f1_score, self.accuracy) < (other.f1_score, other.accuracy)
 
 
-def compute_regression_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
-    speech_idx = detect_voice(y_true)
-
-    metrics = {}
-    metrics["correlation"] = float(np.nanmean(corr_multiple(y_predicted, y_true)))
-
-    if speech_idx is not None:
-        y_predicted, y_true = y_predicted[speech_idx], y_true[speech_idx]
-        corr_speech = corr_multiple(y_predicted, y_true)
-        # log.debug(f"compute_regression_metrics: {corr_speech=}, {len(corr_speech)=}")
-        metrics["correlation_speech"] = float(np.nanmean(corr_speech))
-    else:
-        metrics["correlation_speech"] = 0
-
-    return metrics
-
-
-def compute_classification_metrics(y_predicted: ChanBatch, y_true: ChanBatch) -> dict[str, float]:
-    y_pred_tag = torch.round(torch.sigmoid(torch.from_numpy(y_predicted))).numpy()
-    res = dict(
-        accuracy=float(np.sum(y_pred_tag == y_true) / y_true.size),
-        f1=float(f1_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
-        precision=float(precision_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
-        recall=float(recall_score(np.squeeze(y_true), np.squeeze(y_pred_tag))),
-    )
-    return res
-
-
-class BestMetricsTracker:
+class MetricsTracker(Generic[TMetrics]):
     def __init__(self, metrics_buflen: int = 100):
-        self.best_metrics: np.ndarray | None = None
-        self.metrics_buffer: Deque[np.ndarray] = deque()
+        self.best_metrics: TMetrics | None = None
+        self.metrics_buffer: Deque[TMetrics] = deque()
         self.buflen = metrics_buflen
 
-    def update_buffer(self, new_metrics: np.ndarray) -> None:
+    def update_buffer(self, new_metrics: TMetrics) -> None:
         if len(self.metrics_buffer) >= self.buflen:
             self.metrics_buffer.popleft()
         self.metrics_buffer.append(new_metrics)
 
     def is_improved(self) -> bool:
-        if self.best_metrics is None:
-            return True
+        if not self.metrics_buffer:
+            return False
         smoothed_metrics = self.get_smoothed_metrics()
-        return bool(np.sum(smoothed_metrics) >= np.sum(self.best_metrics))
+        if self.best_metrics is None:
+            self.best_metrics = smoothed_metrics
+            return True
+        if self.best_metrics < smoothed_metrics:
+            self.best_metrics = smoothed_metrics
+            return True
+        return False
 
-    def update_best(self) -> None:
-        self.best_metrics = self.get_smoothed_metrics()
-
-    def get_smoothed_metrics(self) -> np.ndarray:
+    def get_smoothed_metrics(self) -> TMetrics:
         assert self.metrics_buffer, "buffer is empty"
-        return np.asarray(self.metrics_buffer).mean(axis=0)
+        return reduce(operator.add, self.metrics_buffer) / len(self.metrics_buffer)
