@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 import matplotlib
 import matplotlib.figure as mpl_fig
 import matplotlib.pyplot as plt  # type: ignore
-import mne  # type: ignore
+import mne
 import numpy as np  # type: ignore
+import numpy.typing as npt
 import sklearn.preprocessing as skp
+from ndp.signal import Signal  # type: ignore
 
 from library.func_utils import log_execution_time
-from library.interpreter import ModelInterpreter  # type: ignore
+from library.interpreter import ModelInterpreter
+from library.models_regression import SimpleNet  # type: ignore
 
-from .torch_datasets import Continuous
+matplotlib.use("TkAgg")
 
 PLOT_CFG = dict(
     weights=dict(color="k", marker="."),
@@ -70,7 +73,8 @@ class InterpretPlotLayout:
     TEMPORAL_TITLE = "Temporal Patterns"
     SPATIAL_TITLE = "Spatial Patterns"
 
-    def __init__(self, n_branches, plot_spatial, plot_temporal):
+    def __init__(self, n_branches: int, plot_spatial: Callable, plot_temporal: Callable):
+        assert n_branches > 0
         self.n_branches = n_branches
         self.fig, self.ax = plt.subplots(n_branches, 2)
         self.plot_spatial_single = plot_spatial
@@ -83,7 +87,7 @@ class InterpretPlotLayout:
         plt.rc("font", family="serif", size=12)
         for i in range(self.n_branches):
             plt.setp(self.ax[i, 0], ylabel=self.YLABEL.format(i_branch=i + 1))
-        plt.setp(self.ax[i, 0], xlabel=self.XLABEL)
+        plt.setp(self.ax[self.n_branches - 1, 0], xlabel=self.XLABEL)
         self.ax[0, 0].set_title(self.TEMPORAL_TITLE)
         self.ax[0, 1].set_title(self.SPATIAL_TITLE)
         plt.rc("font", family="serif", size=10)
@@ -111,16 +115,24 @@ class InterpretPlotLayout:
 
 
 class ContinuousDatasetPlotter:
-    def __init__(self, dataset: ContinuousDataset):
-        n_channels, n_features = dataset.X.shape[1], dataset.Y.shape[1]
+    def __init__(self, X: Signal, Y: Signal):
+        assert len(X) == len(Y) and X.sr == Y.sr
+        n_channels, n_features = X.n_channels, Y.n_channels
         self.ch_inds = list(range(n_channels))
         self.feat_inds = list(range(n_channels, n_channels + n_features))
         ch_names_data = [f"channel {i + 1}" for i in range(n_channels)]
         ch_names_features = [f"feature {j + 1}" for j in range(n_features)]
         ch_names = ch_names_data + ch_names_features
-        info = mne.create_info(sfreq=dataset.sampling_rate, ch_names=ch_names)
-        data = np.concatenate((dataset.X.T, dataset.Y.T), axis=0)
+        info = mne.create_info(sfreq=X.sr, ch_names=ch_names)
+        data = np.concatenate((np.asarray(X).T, np.asarray(Y).T), axis=0)
         self.raw = mne.io.RawArray(data, info)
+
+        onset, duration, description = [], [], []
+        for a in X.annotations:
+            onset.append(a.onset)
+            duration.append(a.duration)
+            description.append(a.type)
+        self.raw.set_annotations(mne.Annotations(onset, duration, description))
 
     def plot(self, highpass: Optional[float] = None, lowpass: Optional[float] = None) -> None:
         if highpass or lowpass:
@@ -131,7 +143,9 @@ class ContinuousDatasetPlotter:
 
 
 @log_execution_time()
-def get_model_weights_figure(model, X, mne_info, n_branches: int) -> mpl_fig.Figure:  # type: ignore
+def get_model_weights_figure(
+    model: SimpleNet, X: Signal[npt._32Bit], mne_info: MneInfoWithLayout, n_branches: int
+) -> mpl_fig.Figure:
     mi = ModelInterpreter(model, X)
     freqs, weights, patterns = mi.get_temporal(nperseg=1000)
     sp = mi.get_spatial_patterns()
@@ -147,5 +161,3 @@ def get_model_weights_figure(model, X, mne_info, n_branches: int) -> mpl_fig.Fig
     pp.finalize()
     plt.switch_backend("agg")
     return pp.fig
-
-

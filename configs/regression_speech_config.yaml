@@ -9,6 +9,7 @@ lag_backward: 500       # number of samples before the target sound sample
 lag_forward: 0        # number of samples after the target sound sample
 target_features_cnt: 20  # e.g. n_mels for melspectrogram
 selected_channels: ${python_range:"range(0, 306, 3)"}
+# selected_channels: ${python_range:"range(306)"}
 debug: false
 
 batch_size: 100

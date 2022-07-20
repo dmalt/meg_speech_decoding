@@ -50,6 +50,7 @@ class MainConfig:
     train_test_ratio: float
     learning_rate: float
     subject: str
+    plot_loaded: bool = False
 
 
 SimpleType = Union[int, float, bool, str]
