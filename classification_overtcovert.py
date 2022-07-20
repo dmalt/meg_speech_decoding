@@ -1,5 +1,6 @@
 import logging
-from functools import partial, reduce
+from dataclasses import asdict
+from functools import reduce
 from typing import Any
 
 import hydra
@@ -12,14 +13,15 @@ from ndp.signal import Signal
 from ndp.signal.pipelines import SignalProcessor
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
+from tqdm import trange
 
 import speech_meg  # type: ignore
 from library import main_utils
-from library.config_schema import MainConfig, flatten_dict, get_selected_params
-from library.func_utils import log_execution_time
-from library.metrics import compute_classification_metrics
+from library.config_schema import MainConfig, ParamsDict, flatten_dict, get_selected_params
+from library.func_utils import infinite, limited, log_execution_time
+from library.metrics import RegressionMetrics as metrics_cls
 from library.models_regression import SimpleNet
-from library.runner import eval_model, run_experiment
+from library.runner import LossFunction, TestIter, TrainIter, eval_model, train_model
 from library.torch_datasets import Continuous
 from library.visualize import get_model_weights_figure
 
@@ -41,7 +43,7 @@ def get_joint_mask(X: Signal, annot_type: str) -> npt.NDArray[np.bool_]:
     return reduce(lambda x, y: np.logical_or(x, y), masks)
 
 
-Loaders = tuple[DataLoader, DataLoader, DataLoader]
+Loaders = dict[str, DataLoader]
 
 
 def create_data_loaders(X: Signal[npt._32Bit], cfg: MainConfig) -> Loaders:
@@ -64,7 +66,18 @@ def create_data_loaders(X: Signal[npt._32Bit], cfg: MainConfig) -> Loaders:
     train_ldr = DataLoader(train, **dl_params)  # type: ignore
     test_ldr = DataLoader(test, **dl_params)  # type: ignore
     covert_test_ldr = DataLoader(test_covert, **dl_params)  # type: ignore
-    return train_ldr, test_ldr, covert_test_ldr
+    return dict(train=train_ldr, test=test_ldr, covert=covert_test_ldr)
+
+
+def get_metrics(model: nn.Module, loss: LossFunction, ldrs: Loaders, n: int) -> ParamsDict:
+    metrics = {}
+    for stage, ldr in ldrs.items():
+        tr = trange(n, desc=f"Evaluating model on {stage}")
+        eval_iter = limited(TestIter(model, ldr, loss)).by(tr)
+        metrics[stage] = asdict(eval_model(eval_iter, metrics_cls, n))
+
+    log.debug(f"{metrics=}")
+    return flatten_dict(metrics, sep="/")
 
 
 @log_execution_time()
@@ -74,7 +87,7 @@ def main(cfg: MainConfig) -> None:
 
     X, info = read_data(cfg.dataset.transform_x, cfg.subject)
     log.info(f"Loaded X: {str(X)}")
-    train_ldr, test_ldr, covert_test_ldr = create_data_loaders(X, cfg)
+    ldrs = create_data_loaders(X, cfg)
 
     model = SimpleNet(cfg.model)
     if torch.cuda.is_available():
@@ -93,37 +106,24 @@ def main(cfg: MainConfig) -> None:
     # )
     # model.load_state_dict(torch.load(model_path))  # type: ignore
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
+    loss = nn.MSELoss()
 
-    eval_func = partial(
-        eval_model,
-        model=model,
-        metrics_func=compute_classification_metrics,
-        nsteps=cfg.metric_iter,
+    train_iter = map(
+        lambda x: metrics_cls.calc(*x), infinite(TrainIter(model, ldrs["train"], loss, optimizer))
     )
+    test_iter = map(lambda x: metrics_cls.calc(*x), infinite(TestIter(model, ldrs["test"], loss)))
+    tr = trange(cfg.n_steps, desc="Experiment main loop")
     with SummaryWriter("TB") as sw:
-        run_experiment(
-            model,
-            optimizer,
-            train_ldr,
-            test_ldr,
-            cfg.n_steps,
-            cfg.model_upd_freq,
-            sw,
-            compute_metrics=compute_classification_metrics,
-            loss=nn.BCEWithLogitsLoss(),
-        )
-        hparams = get_selected_params(cfg)
-        train_metrics = eval_func(ldr=train_ldr, tqdm_desc="Evaluating model on train")
-        test_metrics = eval_func(ldr=test_ldr, tqdm_desc="Evaluating model on test")
-        covert_metrics = eval_func(ldr=covert_test_ldr, tqdm_desc="Evaluating model on covert")
-        metrics = flatten_dict(
-            {"train": train_metrics, "test": test_metrics, "covert": covert_metrics}, sep="/"
-        )
+        train_model(train_iter, test_iter, tr, model, cfg.model_upd_freq, sw)
 
+        metrics = get_metrics(model, loss, ldrs, cfg.metric_iter)
         log.info("Final metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
+
         options = {"debug": [True, False]}
+        hparams = get_selected_params(cfg)
         sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
-        fig = get_model_weights_figure(model, X, info.mne_info, sw, cfg.model.hidden_channels)
+
+        fig = get_model_weights_figure(model, X, info.mne_info, cfg.model.hidden_channels)
         sw.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=fig)
 
 
