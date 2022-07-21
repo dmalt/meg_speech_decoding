@@ -106,7 +106,7 @@ def train_model(
         metrics_tracker.update_buffer(m_test)
         if i and not i % upd_steps_freq:
             if metrics_tracker.is_improved():
-                log.debug(f"Dumping model for iteration = {i}")
+                log.info(f"Dumping model for iteration = {i}")
                 torch.save(model.state_dict(), model_path)
 
     if metrics_tracker.is_improved():
