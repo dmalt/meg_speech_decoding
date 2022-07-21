@@ -23,7 +23,7 @@ from library.config_schema import MainConfig, ParamsDict, flatten_dict, get_sele
 from library.func_utils import infinite, limited, log_execution_time
 from library.interpreter import ModelInterpreter
 from library.metrics import RegressionMetrics as metrics_cls
-from library.models import SimpleNet
+from library.models import SimpleNet, SimpleNetConv
 from library.runner import LossFunction, TestIter, TrainIter, eval_model, train_model
 from library.torch_datasets import Continuous
 from library.visualize import ContinuousDatasetPlotter, get_model_weights_figure
@@ -104,7 +104,8 @@ def main(cfg: MainConfig) -> None:
     log.info(f"Loaded X: {str(X)}\nLoaded Y: {str(Y)}")
     ldrs = create_data_loaders(X, Y, cfg)
 
-    model = SimpleNet(cfg.model)
+    # model = SimpleNet(cfg.model)
+    model = SimpleNetConv(cfg.model)
     if torch.cuda.is_available():
         model = model.cuda()
 

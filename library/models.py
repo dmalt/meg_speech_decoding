@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 import numpy as np
@@ -9,6 +10,8 @@ from library.type_aliases import ChanBatchTensor, SigBatchTensor
 
 from .config_schema import FeatureExtractorConfig, SimpleNetConfig
 
+log = logging.getLogger(__name__)
+
 
 class FeatureExtractor(nn.Module):
     def __init__(self, cfg: FeatureExtractorConfig):
@@ -19,7 +22,7 @@ class FeatureExtractor(nn.Module):
         self.cfg = cfg
 
         self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, kernel_size=1)
-        self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(cfg.hidden_channels, affine=False)
+        self.unmixed_channels_batchnorm = nn.BatchNorm1d(cfg.hidden_channels, affine=False)
         self.detector = self._create_envelope_detector(cfg.hidden_channels)
 
     def _create_envelope_detector(self, nch: int) -> nn.Sequential:
@@ -64,7 +67,7 @@ class SimpleNet(nn.Module):
         assert window_size > ext_cfg.filtering_size
         assert window_size > ext_cfg.envelope_size
 
-        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
+        self.features_batchnorm = nn.BatchNorm1d(final_out_features, affine=False)
         if cfg.use_lstm:
             hc = ext_cfg.hidden_channels
             self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
@@ -79,6 +82,45 @@ class SimpleNet(nn.Module):
         self.features_scaled = self.features_batchnorm(features)
         output = self.fc_layer(self.features_scaled)
         return output
+
+
+class SimpleNetConv(nn.Module):
+    def __init__(self, cfg: SimpleNetConfig, conv_len=20, pooling_size=4):
+        super(self.__class__, self).__init__()
+        ext_cfg = cfg.feature_extractor
+
+        window_size = cfg.lag_backward + cfg.lag_forward + 1
+        # final_out_features = (window_size // ext_cfg.downsampling + 1) * ext_cfg.hidden_channels
+        extractor_n_features_per_branch = (window_size // ext_cfg.downsampling + 1)
+        final_out_features = (
+            (extractor_n_features_per_branch - conv_len + 1) // pooling_size
+        ) * ext_cfg.hidden_channels
+
+        log.debug(f"{extractor_n_features_per_branch=}")
+        log.debug(f"{final_out_features=}")
+
+        assert window_size > ext_cfg.filtering_size
+        assert window_size > ext_cfg.envelope_size
+
+        self.conv_block = nn.Sequential(
+            FeatureExtractor(ext_cfg),
+            nn.Conv1d(
+                in_channels=ext_cfg.hidden_channels,
+                out_channels=ext_cfg.hidden_channels,
+                kernel_size=conv_len,
+            ),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=pooling_size, stride=pooling_size),
+        )
+        self.head = nn.Sequential(
+            nn.BatchNorm1d(final_out_features, affine=False),
+            nn.Linear(final_out_features, cfg.out_channels),
+        )
+
+    def forward(self, x: SigBatchTensor) -> ChanBatchTensor:
+        features = self.conv_block(x)
+        features = features.reshape((features.shape[0], -1))
+        return self.head(features)
 
 
 #################################
@@ -253,7 +295,7 @@ class DenseNet(nn.Module):
 
         final_out_features = 6250  # KOSTYL
 
-        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
+        self.features_batchnorm = nn.BatchNorm1d(final_out_features, affine=False)
         self.fc_layer = nn.Linear(final_out_features, out_channels)
         self.lstm = nn.LSTM(50, int(50 / 2), num_layers=1, batch_first=True, bidirectional=True)
 
