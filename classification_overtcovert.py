@@ -4,6 +4,7 @@ from functools import reduce
 from typing import Any
 
 import hydra
+import matplotlib
 import numpy as np
 import numpy.typing as npt
 import torch
@@ -13,17 +14,17 @@ from ndp.signal import Signal
 from ndp.signal.pipelines import SignalProcessor
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
-from tqdm import trange
+from tqdm import tqdm, trange  # type: ignore
 
 import speech_meg  # type: ignore
 from library import main_utils
 from library.config_schema import MainConfig, ParamsDict, flatten_dict, get_selected_params
 from library.func_utils import infinite, limited, log_execution_time
-from library.metrics import RegressionMetrics as metrics_cls
+from library.metrics import BinaryClassificationMetrics as metrics_cls
 from library.models_regression import SimpleNet
 from library.runner import LossFunction, TestIter, TrainIter, eval_model, train_model
 from library.torch_datasets import Continuous
-from library.visualize import get_model_weights_figure
+from library.visualize import ContinuousDatasetPlotter, get_model_weights_figure
 
 log = logging.getLogger(__name__)
 main_utils.setup_hydra()
@@ -40,7 +41,10 @@ def read_data(transform_x_cfg: Any, subject: str) -> tuple[Signal[npt._32Bit], A
 
 def get_joint_mask(X: Signal, annot_type: str) -> npt.NDArray[np.bool_]:
     masks = (a.as_mask(X.sr, len(X)) for a in X.annotations if a.type == annot_type)
-    return reduce(lambda x, y: np.logical_or(x, y), masks)
+    try:
+        return reduce(lambda x, y: np.logical_or(x, y), masks)
+    except TypeError:
+        return np.zeros(len(X), dtype=bool)
 
 
 Loaders = dict[str, DataLoader]
@@ -66,7 +70,9 @@ def create_data_loaders(X: Signal[npt._32Bit], cfg: MainConfig) -> Loaders:
     train_ldr = DataLoader(train, **dl_params)  # type: ignore
     test_ldr = DataLoader(test, **dl_params)  # type: ignore
     covert_test_ldr = DataLoader(test_covert, **dl_params)  # type: ignore
-    return dict(train=train_ldr, test=test_ldr, covert=covert_test_ldr)
+    return dict(train=train_ldr, test=test_ldr, covert=covert_test_ldr), Signal(
+        Y_joint, X.sr, X.annotations
+    )
 
 
 def get_metrics(model: nn.Module, loss: LossFunction, ldrs: Loaders, n: int) -> ParamsDict:
@@ -87,7 +93,7 @@ def main(cfg: MainConfig) -> None:
 
     X, info = read_data(cfg.dataset.transform_x, cfg.subject)
     log.info(f"Loaded X: {str(X)}")
-    ldrs = create_data_loaders(X, cfg)
+    ldrs, Y = create_data_loaders(X, cfg)
 
     model = SimpleNet(cfg.model)
     if torch.cuda.is_available():
@@ -125,6 +131,22 @@ def main(cfg: MainConfig) -> None:
 
         fig = get_model_weights_figure(model, X, info.mne_info, cfg.model.hidden_channels)
         sw.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=fig)
+
+    dataset = Continuous(np.asarray(X), np.asarray(Y), cfg.lag_backward, cfg.lag_forward)
+    timeseries_ldr = DataLoader(dataset, shuffle=False, batch_size=cfg.batch_size)
+    Y_predicted_data = np.zeros_like(Y.data, dtype=np.float32)
+    off, stride = cfg.lag_backward, cfg.batch_size
+    for i, (y_pred, _, _) in tqdm(
+        enumerate(TestIter(model, timeseries_ldr, loss)), total=len(dataset) // stride
+    ):
+        Y_predicted_data[off + i * stride : off + (i + 1) * stride, :] = y_pred
+
+    Y_pred_class = torch.round(torch.sigmoid(torch.from_numpy(Y_predicted_data))).numpy()
+    log.debug(f"{Y_pred_class.shape=}")
+
+    matplotlib.use("TkAgg")
+    plotter = ContinuousDatasetPlotter(Signal(Y_pred_class, Y.sr, Y.annotations), Y)
+    plotter.plot()
 
 
 if __name__ == "__main__":
