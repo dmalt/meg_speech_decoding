@@ -3,3 +3,7 @@ model:
   feature_extractor:
     filtering_size: 251          # in samples
     envelope_size: 151           # in samples
+
+dataset:
+  transform_x:
+    l_freq: 1
