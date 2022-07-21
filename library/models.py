@@ -67,9 +67,6 @@ class SimpleNet(nn.Module):
     def get_spatial(self) -> npt.NDArray[Any]:
         return self.unmixing_layer.weight.cpu().detach().numpy()[:, :, 0].T
 
-    def get_unmixed_batch(self) -> npt.NDArray[Any]:
-        return self._unmixed_channels.cpu().detach().numpy()
-
     def forward(self, x: SigBatchTensor) -> ChanBatchTensor:
         self._unmixed_channels = self.unmixing_layer(x)
         unmix_scaled = self.unmixed_channels_batchnorm(self._unmixed_channels)
