@@ -124,6 +124,8 @@ def main(cfg: MainConfig) -> None:
     with SummaryWriter("TB") as sw:
         train_model(train_iter, test_iter, tr, model, cfg.model_upd_freq, sw)
 
+        if cfg.subject == "01":
+            del ldrs["covert"]
         metrics = get_metrics(model, loss, ldrs, cfg.metric_iter)
         log.info("Final metrics: " + ", ".join(f"{k}={v:.3f}" for k, v in metrics.items()))
 
