@@ -102,8 +102,9 @@ class SimpleNetConv(nn.Module):
         assert window_size > ext_cfg.filtering_size
         assert window_size > ext_cfg.envelope_size
 
+        self.feature_extractor = FeatureExtractor(ext_cfg)
         self.conv_block = nn.Sequential(
-            FeatureExtractor(ext_cfg),
+            self.feature_extractor,
             nn.Conv1d(
                 in_channels=ext_cfg.hidden_channels,
                 out_channels=ext_cfg.hidden_channels,
