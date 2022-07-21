@@ -7,13 +7,11 @@ import matplotlib.figure as mpl_fig  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
 import mne  # type: ignore
 import numpy as np  # type: ignore
-import numpy.typing as npt
 import sklearn.preprocessing as skp  # type: ignore
 from ndp.signal import Signal  # type: ignore
 
 from library.func_utils import log_execution_time
 from library.interpreter import ModelInterpreter
-from library.models import SimpleNet  # type: ignore
 
 matplotlib.use("TkAgg")
 
@@ -43,7 +41,7 @@ class TopoVisualizer:
     def __init__(self, info: MneInfoWithLayout):
         self.info = info
 
-    def __call__(self, ax, t, style: str | None = None):
+    def __call__(self, ax, t, style: str | None = None) -> None:
         tt = skp.minmax_scale(np.abs(t))
 
         if len(tt) == 306:
@@ -81,7 +79,7 @@ class InterpretPlotLayout:
         self.plot_temporal_single = plot_temporal
         self.set_figure()
 
-    def set_figure(self):
+    def set_figure(self) -> None:
         self.fig.set_figwidth(self.FIGWIDTH)
         self.fig.set_figheight(self.FIGHEIGHT)
         plt.rc("font", family="serif", size=12)
@@ -92,10 +90,10 @@ class InterpretPlotLayout:
         self.ax[0, 1].set_title(self.SPATIAL_TITLE)
         plt.rc("font", family="serif", size=10)
 
-    def add_temporal(self, f: np.ndarray, signals: list[np.ndarray], style: str) -> None:
+    def add_temporal(self, freqs: np.ndarray, signals: list[np.ndarray], style: str) -> None:
         for i, y in enumerate(signals):
             self.plot_temporal_single(
-                self.ax[i, 0], f[: self.FREQ_XLIM], y[: self.FREQ_XLIM], style
+                self.ax[i, 0], freqs[: self.FREQ_XLIM], y[: self.FREQ_XLIM], style
             )
 
     def add_spatial(self, data: list[np.ndarray], style: str) -> None:
@@ -107,11 +105,10 @@ class InterpretPlotLayout:
         for i, tt in enumerate(data):
             self.plot_spatial_single(self.ax[i, 1], tt, style)
 
-    def finalize(self):
+    def finalize(self) -> None:
         for i in range(self.n_branches):
             self.ax[i, 0].grid()
         self.ax[0, 0].legend(**self.LEGEND_CFG)
-        # self.ax[0, 1].legend(**self.LEGEND_CFG)
 
 
 class ContinuousDatasetPlotter:
@@ -143,15 +140,12 @@ class ContinuousDatasetPlotter:
 
 
 @log_execution_time()
-def get_model_weights_figure(
-    model: SimpleNet, X: Signal[npt._32Bit], mne_info: MneInfoWithLayout, n_branches: int
-) -> mpl_fig.Figure:
-    mi = ModelInterpreter(model, X)
+def get_model_weights_figure(mi: ModelInterpreter, info: MneInfoWithLayout, n: int) -> mpl_fig.Figure:
     freqs, weights, patterns = mi.get_temporal(nperseg=1000)
     sp = mi.get_spatial_patterns()
     sp_naive = mi.get_naive()
-    plot_topo = TopoVisualizer(mne_info)
-    pp = InterpretPlotLayout(n_branches, plot_topo, plot_temporal_as_line)
+    plot_topo = TopoVisualizer(info)
+    pp = InterpretPlotLayout(n, plot_topo, plot_temporal_as_line)
 
     pp.FREQ_XLIM = 150
     pp.add_temporal(freqs, weights, "weights")

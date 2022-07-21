@@ -1,8 +1,9 @@
 defaults:
   - simple_net_base
+  - _self_
 use_lstm: False
-downsampling: 10             # downsampling coefficient for envelopes
-hidden_channels: 4           # must be even
-filtering_size: 25          # in samples
-envelope_size: 15           # in samples
-fc_hidden_features: 100      # not used
+feature_extractor:
+  downsampling: 10             # downsampling coefficient for envelopes
+  hidden_channels: 4           # must be even
+  filtering_size: 25          # in samples
+  envelope_size: 15           # in samples

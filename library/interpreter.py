@@ -13,13 +13,13 @@ from ndp.signal.spectral import asd
 from torch.autograd import Variable
 
 from .func_utils import log_execution_time
-from .models import SimpleNet
+from .models import FeatureExtractor
 
 log = logging.getLogger(__name__)
 
 
 class ModelInterpreter:
-    def __init__(self, model: SimpleNet, X: Signal[npt._32Bit]):
+    def __init__(self, model: FeatureExtractor, X: Signal[npt._32Bit]):
         self.model = model
         self.unmixing_layer = model.unmixing_layer
         self.X = X

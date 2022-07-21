@@ -21,17 +21,21 @@ class DatasetConfig:
 
 
 @dataclass
-class SimpleNetConfig:
+class FeatureExtractorConfig:
     in_channels: int
-    out_channels: int
-    lag_backward: int
-    lag_forward: int
-    use_lstm: bool
     downsampling: int
     hidden_channels: int
     filtering_size: int
     envelope_size: int
-    fc_hidden_features: int
+
+
+@dataclass
+class SimpleNetConfig:
+    out_channels: int
+    lag_backward: int
+    lag_forward: int
+    use_lstm: bool
+    feature_extractor: FeatureExtractorConfig
 
 
 @dataclass

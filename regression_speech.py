@@ -21,6 +21,7 @@ import speech_meg
 from library import main_utils
 from library.config_schema import MainConfig, ParamsDict, flatten_dict, get_selected_params
 from library.func_utils import infinite, limited, log_execution_time
+from library.interpreter import ModelInterpreter
 from library.metrics import RegressionMetrics as metrics_cls
 from library.models import SimpleNet
 from library.runner import LossFunction, TestIter, TrainIter, eval_model, train_model
@@ -124,7 +125,9 @@ def main(cfg: MainConfig) -> None:
         hparams = get_selected_params(cfg)
         sw.add_hparams(hparams, metrics, hparam_domain_discrete=options, run_name="hparams")
 
-        fig = get_model_weights_figure(model, X, info.mne_info, cfg.model.hidden_channels)
+        n_branches = cfg.model.feature_extractor.hidden_channels
+        mi = ModelInterpreter(model.feature_extractor, X)
+        fig = get_model_weights_figure(mi, info.mne_info, n_branches)
         sw.add_figure(tag=f"nsteps = {cfg.n_steps}", figure=fig)
 
     dataset = Continuous(np.asarray(X), np.asarray(Y), cfg.lag_backward, cfg.lag_forward)

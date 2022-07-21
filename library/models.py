@@ -7,42 +7,20 @@ import torch.nn as nn
 
 from library.type_aliases import ChanBatchTensor, SigBatchTensor
 
-from .config_schema import SimpleNetConfig
+from .config_schema import FeatureExtractorConfig, SimpleNetConfig
 
 
-class SimpleNet(nn.Module):
-    def __init__(self, cfg: SimpleNetConfig):
+class FeatureExtractor(nn.Module):
+    def __init__(self, cfg: FeatureExtractorConfig):
         super(self.__class__, self).__init__()
         assert cfg.filtering_size % 2 == 1, "conv weights must be odd"
         assert cfg.envelope_size % 2 == 1, "envelope size must be odd"
         assert cfg.hidden_channels % 2 == 0, "hidden channels number must be even"
         self.cfg = cfg
 
-        window_size = cfg.lag_backward + cfg.lag_forward + 1
-        final_out_features = (window_size // cfg.downsampling + 1) * cfg.hidden_channels
-
-        assert window_size > cfg.filtering_size
-        assert window_size > cfg.envelope_size
-
         self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, kernel_size=1)
         self.unmixed_channels_batchnorm = torch.nn.BatchNorm1d(cfg.hidden_channels, affine=False)
         self.detector = self._create_envelope_detector(cfg.hidden_channels)
-        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
-        if cfg.use_lstm:
-            hc = cfg.hidden_channels
-            self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
-
-        # self.fc_layer = nn.Sequential(
-        #     nn.Linear(final_out_features, out_channels),
-        #             nn.Linear(final_out_features, fc_hidden_features),
-        #             nn.ReLU(),
-        #             nn.Linear(fc_hidden_features, fc_hidden_features),
-        #             nn.ReLU(),
-        #             nn.Linear(fc_hidden_features, fc_hidden_features),
-        #             nn.ReLU(),
-        #             nn.Linear(fc_hidden_features, out_channels),
-        # )
-        self.fc_layer = nn.Linear(final_out_features, cfg.out_channels)
 
     def _create_envelope_detector(self, nch: int) -> nn.Sequential:
         # 1. Learn band pass flter
@@ -55,8 +33,6 @@ class SimpleNet(nn.Module):
             nn.Conv1d(nch, nch, kernel_size=kern_conv, bias=False, groups=nch, padding=pad_conv),
             nn.BatchNorm1d(nch, affine=False),
             nn.LeakyReLU(-1),  # just absolute value
-            # nn.PReLU(),
-            # LogActivation(),
             nn.Conv1d(nch, nch, kernel_size=kern_env, groups=nch, padding=pad_env),
         )
 
@@ -72,7 +48,32 @@ class SimpleNet(nn.Module):
         unmix_scaled = self.unmixed_channels_batchnorm(self._unmixed_channels)
         detected_envelopes = self.detector(unmix_scaled)
         features = detected_envelopes[:, :, :: self.cfg.downsampling].contiguous()
-        if self.cfg.use_lstm:
+        return features
+
+
+class SimpleNet(nn.Module):
+    def __init__(self, cfg: SimpleNetConfig):
+        super(self.__class__, self).__init__()
+        self.is_use_lstm = cfg.use_lstm
+        ext_cfg = cfg.feature_extractor
+        self.feature_extractor = FeatureExtractor(ext_cfg)
+
+        window_size = cfg.lag_backward + cfg.lag_forward + 1
+        final_out_features = (window_size // ext_cfg.downsampling + 1) * ext_cfg.hidden_channels
+
+        assert window_size > ext_cfg.filtering_size
+        assert window_size > ext_cfg.envelope_size
+
+        self.features_batchnorm = torch.nn.BatchNorm1d(final_out_features, affine=False)
+        if cfg.use_lstm:
+            hc = ext_cfg.hidden_channels
+            self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
+
+        self.fc_layer = nn.Linear(final_out_features, cfg.out_channels)
+
+    def forward(self, x: SigBatchTensor) -> ChanBatchTensor:
+        features = self.feature_extractor(x)
+        if self.is_use_lstm:
             features = self.lstm(features.transpose(1, 2))[0].transpose(1, 2)
         features = features.reshape((features.shape[0], -1))
         self.features_scaled = self.features_batchnorm(features)
