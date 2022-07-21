@@ -13,7 +13,7 @@ from ndp.signal.spectral import asd
 from torch.autograd import Variable
 
 from .func_utils import log_execution_time
-from .models_regression import SimpleNet
+from .models import SimpleNet
 
 log = logging.getLogger(__name__)
 

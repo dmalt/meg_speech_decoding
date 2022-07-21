@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-import matplotlib
-import matplotlib.figure as mpl_fig
+import matplotlib  # type: ignore
+import matplotlib.figure as mpl_fig  # type: ignore
 import matplotlib.pyplot as plt  # type: ignore
-import mne
+import mne  # type: ignore
 import numpy as np  # type: ignore
 import numpy.typing as npt
-import sklearn.preprocessing as skp
+import sklearn.preprocessing as skp  # type: ignore
 from ndp.signal import Signal  # type: ignore
 
 from library.func_utils import log_execution_time
 from library.interpreter import ModelInterpreter
-from library.models_regression import SimpleNet  # type: ignore
+from library.models import SimpleNet  # type: ignore
 
 matplotlib.use("TkAgg")
 
