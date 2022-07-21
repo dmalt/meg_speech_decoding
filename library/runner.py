@@ -104,7 +104,7 @@ def train_model(
             experiment_tracker.add_scalar(f"ongoing_test/{tag}", value, i)
 
         metrics_tracker.update_buffer(m_test)
-        if not i % upd_steps_freq:
+        if i and not i % upd_steps_freq:
             if metrics_tracker.is_improved():
                 log.debug(f"Dumping model for iteration = {i}")
                 torch.save(model.state_dict(), model_path)
