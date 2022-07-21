@@ -149,7 +149,9 @@ def main(cfg: MainConfig) -> None:
     log.debug(f"{Y_pred_class.shape=}")
 
     matplotlib.use("TkAgg")
-    plotter = ContinuousDatasetPlotter(Signal(Y_pred_class, Y.sr, Y.annotations), Y)
+    plotter = ContinuousDatasetPlotter(
+        Signal(Y_pred_class, Y.sr, Y.annotations), Signal(Y_predicted_data, Y.sr, Y.annotations)
+    )
     plotter.plot()
 
 
