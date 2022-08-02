@@ -30,8 +30,17 @@ pip install --no-deps -e .
 
 4. Load the data
 Use DVC to load the data stored on GDrive
-(requires authorization; the data folder must be shared with you)
+(requires authorization; the data folder must be shared with you).
 
+This step can be done in a separate environment to avoid packages clutter with dvc
+which depends on a lot of stuff.
+
+Install dvc and gdrive extension:
+```bash
+pip install dvc dvc[gdrive]
+```
+
+From `speech_meg` folder run
 ```
 dvc pull
 ```
