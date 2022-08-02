@@ -18,35 +18,30 @@ First, activate the environment with
 conda activate speechdl3.9
 ```
 
-Training is launched via `main.py`'s CLI interface, which is provided by [hydra](https://hydra.cc/), e.g.
+Training for regression is launched via `regression_speech.py`'s CLI interface:
 ```
-python main.py +experiment=meg_all_sensors
+python regression_speech.py [CLI params]
 ```
+
+Main configuration file: `configs/regression_speech_config.yaml`
+
+The classification is launched via `classification_overtcovert.py`:
+```
+python classification_overtcovert.py [CLI params]
+```
+
+Main configuration file: `configs/classification_overtcovert_config.yaml`
 
 Model dump, tensorboard stats, logs etc. are saved in `outputs/` under
 unuque date and time subfolders.
 
 Configuration
 -------------
-- Possible configurations are available at `configs/`.
-- Changes to configuration should be made via creating an experiment in `configs/experiment/`
+Configuration files are available at `configs/`.
 
+Main configuration file for each script determines how other configuration files in `configs`
+are composed together to achieve the final configuration.
 
-Interpretable weights visualization
------------------------------------
-Select model's date and time in `run_interpreter.py` and launch it with
+The `CLI params` that can be passed to the script are determined by the final
+composed configuration. For details, check out [hydra documentation](https://hydra.cc/).
 
-```
-python run_interpreter.py
-```
-
-Ecog data download
-------------------
-
-Ecog data can be downloaded from GDrive with
-```
-./download_data.sh
-```
-
-Files are automatically saved under `$HOME/Data/speech_dl/Procenko`.
-Make sure to change the configuration for launch
