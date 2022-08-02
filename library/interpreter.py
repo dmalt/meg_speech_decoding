@@ -34,6 +34,17 @@ class ModelInterpreter:
             X_unmixed = self.unmixing_layer(X_tensor).cpu().detach().numpy().T
         return self.X.update(X_unmixed)
 
+    def get_envelopes(self) -> Signal[npt._32Bit]:
+        self.model.eval()
+        X = self.unmix_signal()
+        X_tensor = Variable(torch.FloatTensor(np.asarray(X).T[np.newaxis, :, :]))
+        log.debug(f"{X_tensor.shape}")
+        unmix_scaled = self.model.unmixed_channels_batchnorm(X_tensor)
+        detected_envelopes = np.squeeze(self.model.detector(unmix_scaled).cpu().detach().numpy()).T
+        if detected_envelopes.ndim == 1:
+            detected_envelopes = detected_envelopes[:, np.newaxis]
+        return self.X.update(detected_envelopes)
+
     @log_execution_time(desc="getting temporal patterns")
     def get_temporal(self, nperseg: int) -> tuple[np.ndarray, list[np.ndarray], list[np.ndarray]]:
         """
@@ -61,6 +72,8 @@ class ModelInterpreter:
         X_unmixed = self.unmix_signal()
 
         conv_weights = self.model.get_conv_filtering_weights()
+        if conv_weights.ndim == 1:
+            conv_weights = conv_weights[np.newaxis, :]
         assert conv_weights.shape[0] % X_unmixed.n_channels == 0
         filt_per_ch = conv_weights.shape[0] // X_unmixed.n_channels
 
@@ -92,6 +105,8 @@ class ModelInterpreter:
     def get_spatial_patterns(self) -> list[np.ndarray]:
         spectral_weights = self.get_spatial_weigts()
         TW = self.model.get_conv_filtering_weights()
+        if TW.ndim == 1:
+            TW = TW[np.newaxis, :]
         patterns = []
         X_filt = np.zeros_like(self.X)
         for i_comp in range(TW.shape[0]):

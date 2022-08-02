@@ -10,7 +10,7 @@ from typing import Any, Deque, Generic, TypeVar
 
 import numpy as np
 import torch
-from sklearn.metrics import f1_score, precision_score, recall_score  # type: ignore
+from sklearn.metrics import f1_score, precision_score, recall_score, roc_auc_score  # type: ignore
 
 from library.type_aliases import ChanBatch
 
@@ -79,6 +79,7 @@ class BinaryClassificationMetrics(Metrics):
     accuracy: float
     precision: float
     recall: float
+    roc_auc: float
     bce_with_logit: float
 
     @classmethod
@@ -86,12 +87,15 @@ class BinaryClassificationMetrics(Metrics):
         cls, y_predicted: ChanBatch, y_true: ChanBatch, bce_with_logit: float
     ) -> BinaryClassificationMetrics:
         bce_with_logit = bce_with_logit
-        y_pred_tag = torch.round(torch.sigmoid(torch.from_numpy(y_predicted))).numpy()
+        y_pred_proba = torch.sigmoid(torch.from_numpy(y_predicted))
+        y_pred_tag = torch.round(y_pred_proba).numpy()
+        y_pred_proba = y_pred_proba.numpy()
         accuracy = float(np.sum(y_pred_tag == y_true) / y_true.size)
         f1 = float(f1_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
         precision = float(precision_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
         recall = float(recall_score(np.squeeze(y_true), np.squeeze(y_pred_tag)))
-        return cls(f1, accuracy, precision, recall, bce_with_logit)
+        roc_auc = float(roc_auc_score(np.squeeze(y_true), np.squeeze(y_pred_proba)))
+        return cls(f1, accuracy, precision, recall, roc_auc, bce_with_logit)
 
     def __lt__(self, other: BinaryClassificationMetrics) -> bool:
         return (self.f1_score, self.accuracy) < (other.f1_score, other.accuracy)

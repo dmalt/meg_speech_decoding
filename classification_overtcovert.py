@@ -96,8 +96,11 @@ def main(cfg: MainConfig) -> None:
     log.info(f"Loaded X: {str(X)}")
     ldrs, Y = create_data_loaders(X, cfg)
 
-    # model = SimpleNet(cfg.model)
-    model = SimpleNetConv(cfg.model)
+    if cfg.plot_loaded:
+        ContinuousDatasetPlotter(X, Y).plot()
+
+    model = SimpleNet(cfg.model)
+    # model = SimpleNetConv(cfg.model)
     if torch.cuda.is_available():
         model = model.cuda()
 
@@ -152,7 +155,9 @@ def main(cfg: MainConfig) -> None:
 
     matplotlib.use("TkAgg")
     plotter = ContinuousDatasetPlotter(
-        Signal(Y_pred_class, Y.sr, Y.annotations), Signal(Y_predicted_data, Y.sr, Y.annotations)
+        Signal(Y_pred_class, Y.sr, Y.annotations),
+        Signal(Y_predicted_data, Y.sr, Y.annotations),
+        mi.get_envelopes(),
     )
     plotter.plot()
 

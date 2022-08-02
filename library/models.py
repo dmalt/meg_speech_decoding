@@ -19,7 +19,6 @@ class FeatureExtractor(nn.Module):
         super(self.__class__, self).__init__()
         assert cfg.filtering_size % 2 == 1, "conv weights must be odd"
         assert cfg.envelope_size % 2 == 1, "envelope size must be odd"
-        assert cfg.hidden_channels % 2 == 0, "hidden channels number must be even"
         self.cfg = cfg
 
         self.unmixing_layer = nn.Conv1d(cfg.in_channels, cfg.hidden_channels, kernel_size=1)
@@ -70,6 +69,7 @@ class SimpleNet(nn.Module):
 
         self.features_batchnorm = nn.BatchNorm1d(final_out_features, affine=False)
         if cfg.use_lstm:
+            assert cfg.hidden_channels % 2 == 0, "hidden channels number must be even"
             hc = ext_cfg.hidden_channels
             self.lstm = nn.LSTM(hc, hc // 2, num_layers=1, batch_first=True, bidirectional=True)
 
@@ -129,11 +129,13 @@ class EEGNet(nn.Module):
     """Taken from https://github.com/aliasvishnu/EEGNet/blob/master/EEGNet-PyTorch.ipynb"""
     def __init__(self):
         super(EEGNet, self).__init__()
-        self.T = 120
+        T = 120  # number of time samples
+        conv1_length = 64
+        f1 = 16
 
         # Layer 1
-        self.conv1 = nn.Conv2d(1, 16, (1, 64), padding=0)
-        self.batchnorm1 = nn.BatchNorm2d(16, False)
+        self.conv1 = nn.Conv2d(1, f1, (1, conv1_length), padding=0)
+        self.batchnorm1 = nn.BatchNorm2d(f1, False)
 
         # Layer 2
         self.padding1 = nn.ZeroPad2d((16, 17, 0, 1))

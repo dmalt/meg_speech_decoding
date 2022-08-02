@@ -19,6 +19,7 @@ train_test_ratio: 0.6
 learning_rate: 0.0003
 
 subject: "02"
+plot_loaded: False
 
 hydra:
   run:

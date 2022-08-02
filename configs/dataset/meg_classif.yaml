@@ -10,7 +10,7 @@ read:
 
 transform_x:
   _target_: library.transformers.MegPipeline
-  l_freq: 10
+  l_freq: 1
   h_freq: 120
   notch_freqs: []
   selected_channels: ${selected_channels}

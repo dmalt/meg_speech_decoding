@@ -75,6 +75,8 @@ class InterpretPlotLayout:
         assert n_branches > 0
         self.n_branches = n_branches
         self.fig, self.ax = plt.subplots(n_branches, 2)
+        if n_branches == 1:
+            self.ax = self.ax[np.newaxis, :]
         self.plot_spatial_single = plot_spatial
         self.plot_temporal_single = plot_temporal
         self.set_figure()
@@ -112,20 +114,19 @@ class InterpretPlotLayout:
 
 
 class ContinuousDatasetPlotter:
-    def __init__(self, X: Signal, Y: Signal):
-        assert len(X) == len(Y) and X.sr == Y.sr
-        n_channels, n_features = X.n_channels, Y.n_channels
-        self.ch_inds = list(range(n_channels))
-        self.feat_inds = list(range(n_channels, n_channels + n_features))
-        ch_names_data = [f"channel {i + 1}" for i in range(n_channels)]
-        ch_names_features = [f"feature {j + 1}" for j in range(n_features)]
-        ch_names = ch_names_data + ch_names_features
-        info = mne.create_info(sfreq=X.sr, ch_names=ch_names)
-        data = np.concatenate((np.asarray(X).T, np.asarray(Y).T), axis=0)
+    def __init__(self, *X: Signal):
+        assert X, "must provide at lease one signal"
+        n_channels = [x.n_channels for x in X]
+        self.ch_inds = [list(range(n)) for n in n_channels]
+        ch_names = []
+        for i, n in enumerate(n_channels):
+            ch_names.extend([f"group{i + 1} {j + 1}" for j in range(n)])
+        info = mne.create_info(sfreq=X[0].sr, ch_names=ch_names)
+        data = np.concatenate([np.asarray(x).T for x in X], axis=0)
         self.raw = mne.io.RawArray(data, info)
 
         onset, duration, description = [], [], []
-        for a in X.annotations:
+        for a in X[0].annotations:
             onset.append(a.onset)
             duration.append(a.duration)
             description.append(a.type)
