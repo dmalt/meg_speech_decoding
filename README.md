@@ -1,8 +1,16 @@
 Installation
 ------------
-Setup conda virtual env with
+1. Clone this project with submodules:
 
 ```bash
+git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git
+```
+
+
+2. Setup conda virtual env with
+
+```bash
+cd ossadtchi-ml-test-bench-speech
 conda env create -f environment_freeze.yml
 ```
 
@@ -10,6 +18,25 @@ Activate the environment with
 ```bash
 conda activate speechdl3.9
 ```
+
+3. Install the submodules:
+
+```
+cd neural_data_preprocessing
+pip install --no-deps -e .
+cd ../speech_meg
+pip install --no-deps -e .
+```
+
+4. Load the data
+Use DVC to load the data stored on GDrive
+(requires authorization; the data folder must be shared with you)
+
+```
+dvc pull
+```
+
+More info on the loaded data structure [here](https://github.com/dmalt/speech_meg)
 
 Launch
 ------
