@@ -14,7 +14,7 @@ Installation:
 git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git && \
 pip install dvc dvc[gdrive] && \
 cd ossadtchi-ml-test-bench-speech/speech_meg && \
-dvc pull -r test && \
+dvc pull -r test --glob "**/sub-test.dvc" && \
 cd .. && \
 conda env create -f environment_freeze.yml && \
 conda activate speechdl3.9 && \
