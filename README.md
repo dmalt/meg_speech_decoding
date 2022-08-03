@@ -19,15 +19,16 @@ Install dvc and gdrive extension:
 pip install dvc dvc[gdrive]
 ```
 
-From `speech_meg` folder run
+From `ossadtchi-ml-test-bench-/speech_meg` folder run
 ```
 dvc pull -r test
 ```
 
 N.B.
-> The data download should start after gmail account authentification. You'll see some warnings
-> about data being absent both locally and on remote. This is normal behaviour: test remote stores
-> only the test subject and doesn't contain all the files which dvc expects to find.
+> The data download should start after gmail account authentification. You'll
+> see some warnings about "some cache files not existing locally nor on
+> remote". This is normal behaviour: test remote stores only the test subject
+> and doesn't contain all the files which dvc expects to find.
 
 More info on the loaded data structure [here](https://github.com/dmalt/speech_meg)
 
