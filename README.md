@@ -1,3 +1,8 @@
+Quickstart
+===========
+Instructions here are tested on Ubuntu Linux, but should work on any platform, although Windows
+and MacOS will require different conda enviroment setup (see the note in step 3).
+
 Installation
 ------------
 1. Clone this project with submodules:
@@ -6,35 +11,9 @@ Installation
 git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git
 ```
 
+2. Load the test data
 
-2. Setup conda virtual env with
-
-```bash
-cd ossadtchi-ml-test-bench-speech
-conda env create -f environment_freeze.yml
-```
-
-Activate the environment with
-```bash
-conda activate speechdl3.9
-```
-
-3. Install the submodules:
-
-```
-cd neural_data_preprocessing
-pip install --no-deps -e .
-cd ../speech_meg
-pip install --no-deps -e .
-```
-
-4. Load the data
-Use DVC to load the data stored on GDrive
-(requires authorization; the data folder must be shared with you).
-
-This step can be done in a separate environment to avoid packages clutter with dvc
-which depends on a lot of stuff.
-
+Use DVC to load the data stored on GDrive.
 Install dvc and gdrive extension:
 ```bash
 pip install dvc dvc[gdrive]
@@ -42,42 +21,63 @@ pip install dvc dvc[gdrive]
 
 From `speech_meg` folder run
 ```
-dvc pull
+dvc pull -r test
 ```
+
+N.B.
+> The data download should start after gmail account authentification. You'll see some warnings
+> about data being absent both locally and on remote. This is normal behaviour: test remote stores
+> only the test subject and doesn't contain all the files which dvc expects to find.
 
 More info on the loaded data structure [here](https://github.com/dmalt/speech_meg)
 
-Launch
-------
-First, activate the environment with
-```
+3. Setup and activate conda virtual env with
+
+```bash
+cd ossadtchi-ml-test-bench-speech
+conda env create -f environment_freeze.yml
 conda activate speechdl3.9
 ```
 
-Training for regression is launched via `regression_speech.py`'s CLI interface:
+N.B.
+> The frozen enviroment file is for Linux only since conda packages are not
+> cross-platform. On Windows or MacOS use `conda env create -f enviroment.yml`,
+> which will solve the environment for you. Note, that solving the enviroment
+> with conda might take forever (not tested). In case conda freezes we
+> recommend trying [mamba](https://mamba.readthedocs.io/en/latest/) instead.
+
+4. Install the submodules:
+
 ```
-python regression_speech.py [CLI params]
+pip install --no-deps -e ./neural_data_preprocessing/
+pip install --no-deps -e ./speech_meg/
 ```
 
-Main configuration file: `configs/regression_speech_config.yaml`
 
-The classification is launched via `classification_overtcovert.py`:
+Launch
+------
+Training for regression:
 ```
-python classification_overtcovert.py [CLI params]
+python regression_speech.py +experiment=test
 ```
 
-Main configuration file: `configs/classification_overtcovert_config.yaml`
+Training for classification:
+```
+python classification_overtcovert.py +experiment=test
+```
 
-Model dump, tensorboard stats, logs etc. are saved in `outputs/` under
+Model dump, tensorboard stats, logs etc. will be saved in `outputs/` under
 unuque date and time subfolders.
 
 Configuration
 -------------
+- Main configuration file for regression: `configs/regression_speech_config.yaml`
+- Main configuration file for classification: `configs/classification_overtcovert_config.yaml`
+
 Configuration files are available at `configs/`.
 
 Main configuration file for each script determines how other configuration files in `configs`
 are composed together to achieve the final configuration.
 
-The `CLI params` that can be passed to the script are determined by the final
+The `CLI params` that can be passed to the scripts are determined by the final
 composed configuration. For details, check out [hydra documentation](https://hydra.cc/).
-
