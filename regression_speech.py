@@ -82,12 +82,12 @@ def create_data_loaders(X: Signal[npt._32Bit], Y: Signal[npt._32Bit], cfg: MainC
     )
 
 
-def get_metrics(model: nn.Module, loss: LossFunction, ldrs: Loaders, n: int) -> ParamsDict:
+def get_metrics(model: nn.Module, loss: LossFunction, ldrs: Loaders, n_iter: int) -> ParamsDict:
     metrics = {}
     for stage, ldr in ldrs.items():
-        tr = trange(n, desc=f"Evaluating model on {stage}")
+        tr = trange(n_iter, desc=f"Evaluating model on {stage}")
         eval_iter = limited(TestIter(model, ldr, loss)).by(tr)
-        metrics[stage] = asdict(eval_model(eval_iter, metrics_cls, n))
+        metrics[stage] = asdict(eval_model(eval_iter, metrics_cls, n_iter))
 
     log.debug(f"{metrics=}")
     return flatten_dict(metrics, sep="/")
