@@ -32,10 +32,10 @@ N.B.
 
 More info on the loaded data structure [here](https://github.com/dmalt/speech_meg)
 
-3. Setup and activate conda virtual env with
+3. Setup and activate conda virtual env
 
+From `ossadtchi-ml-test-bench-speech` folder run:
 ```bash
-cd ossadtchi-ml-test-bench-speech
 conda env create -f environment_freeze.yml
 conda activate speechdl3.9
 ```
@@ -47,22 +47,25 @@ N.B.
 > with conda might take forever (not tested). In case conda freezes we
 > recommend trying [mamba](https://mamba.readthedocs.io/en/latest/) instead.
 
-4. Install the submodules:
+4. Install the submodules
 
+From `ossadtchi-ml-test-bench-speech` folder run:
 ```
-pip install --no-deps -e ./neural_data_preprocessing/
-pip install --no-deps -e ./speech_meg/
+pip install --no-deps -e neural_data_preprocessing
+pip install --no-deps -e speech_meg
 ```
 
 
 Launch
 ------
-Training for regression:
+Again, make sure `ossadtchi-ml-test-bench-speech` is the current working directory.
+
+Launch training for regression with:
 ```
 python regression_speech.py +experiment=test
 ```
 
-Training for classification:
+Launch training for classification with:
 ```
 python classification_overtcovert.py +experiment=test
 ```
