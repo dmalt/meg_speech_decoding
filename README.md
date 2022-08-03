@@ -7,6 +7,26 @@ Installation prerequisites:
 - [Anaconda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/download.html)
 - Git
 
+TL;DR (Linux)
+-------------
+Installation:
+```bash
+git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git && \
+pip install dvc dvc[gdrive] && \
+cd ossadtchi-ml-test-bench-speech/speech_meg && \
+dvc pull -r test && \
+cd .. && \
+conda env create -f environment_freeze.yml && \
+conda activate speechdl3.9 && \
+pip install --no-deps -e neural_data_preprocessing && \
+pip install --no-deps -e speech_meg
+```
+
+Launch:
+```
+python regression_speech.py +experiment=test
+```
+
 Installation
 ------------
 1. Clone this project with submodules:
