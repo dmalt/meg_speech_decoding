@@ -3,4 +3,4 @@
 	url = ../neural_data_preprocessing
 [submodule "speech_meg"]
 	path = speech_meg
-	url = git@github.com:dmalt/speech_meg.git
+	url = https://github.com/dmalt/speech_meg.git
