@@ -3,6 +3,10 @@ Quickstart
 Instructions here are tested on Ubuntu Linux, but should work on any platform, although Windows
 and MacOS will require different conda enviroment setup (see the note in step 3).
 
+Installation prerequisites:
+- [Anaconda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/download.html)
+- Git
+
 Installation
 ------------
 1. Clone this project with submodules:
