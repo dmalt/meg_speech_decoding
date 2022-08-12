@@ -96,9 +96,13 @@ class ModelInterpreter:
     @log_execution_time(desc="getting spatial weights")
     def get_spatial_weigts(self) -> np.ndarray:
         spatial_weights = self.model.get_spatial()
-        scaler = skp.StandardScaler()
-        scaler.fit(self.X)
-        spatial_weights /= scaler.var_[:, np.newaxis]  # pyright: ignore
+        var = np.var(self.X, axis=0)[:, np.newaxis]
+        if np.any(var < 1e-16):
+            log.warning(
+                "Signal variance is too small for some channels. "
+                "To avoid numerical issues, please normalize the data."
+            )
+        spatial_weights /= var
         return spatial_weights
 
     @log_execution_time(desc="getting spatial patterns")
