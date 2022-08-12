@@ -117,7 +117,7 @@ def main(cfg: MainConfig) -> None:
     # )
     # model.load_state_dict(torch.load(model_path))  # type: ignore
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
-    loss = nn.MSELoss()
+    loss = nn.BCEWithLogitsLoss()
 
     train_iter = map(
         lambda x: metrics_cls.calc(*x), infinite(TrainIter(model, ldrs["train"], loss, optimizer))
