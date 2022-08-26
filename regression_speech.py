@@ -104,8 +104,8 @@ def main(cfg: MainConfig) -> None:
     log.info(f"Loaded X: {str(X)}\nLoaded Y: {str(Y)}")
     ldrs = create_data_loaders(X, Y, cfg)
 
-    # model = SimpleNet(cfg.model)
-    model = SimpleNetConv(cfg.model)
+    model = SimpleNet(cfg.model)
+    # model = SimpleNetConv(cfg.model)
     if torch.cuda.is_available():
         model = model.cuda()
 
