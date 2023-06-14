@@ -118,4 +118,4 @@ Configuration files are available at `configs/`.
 Main configuration file for each script determines how
 [hydra](https://hydra.cc/) assembles the final configuration from the files in
 `configs`. This final configuration allows hydra to generate the `CLI params`
-that we can pass to the scripts.
+that we can pass to the launch scripts.
