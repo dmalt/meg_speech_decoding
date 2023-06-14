@@ -14,9 +14,9 @@ Installation prerequisites:
 Installation:
 
 ```bash
-git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git && \
+git clone --recurse-submodules https://github.com/dmalt/meg_speech_decoding.git && \
 pip install dvc dvc[gdrive] && \
-cd ossadtchi-ml-test-bench-speech/speech_meg && \
+cd meg_speech_decoding/speech_meg && \
 dvc pull -r test --glob "rawdata/derivatives/*/sub-test.dvc" && \
 cd .. && \
 conda env create -f environment_freeze.yml && \
@@ -36,7 +36,7 @@ python regression_speech.py +experiment=test
 1. Clone this project with submodules:
 
     ```bash
-    git clone --recurse-submodules https://github.com/dmalt/ossadtchi-ml-test-bench-speech.git
+    git clone --recurse-submodules https://github.com/dmalt/meg_speech_decoding.git
     ```
 
 2. Load the test data
@@ -48,7 +48,7 @@ python regression_speech.py +experiment=test
     pip install dvc dvc[gdrive]
     ```
 
-    From `ossadtchi-ml-test-bench-/speech_meg` folder run
+    From `meg_speech_decoding/speech_meg` folder run
 
     ```bash
     dvc pull -r test --glob "rawdata/derivatives/*/sub-test.dvc"
@@ -65,7 +65,7 @@ python regression_speech.py +experiment=test
 
 3. Setup and activate conda virtual env
 
-    From `ossadtchi-ml-test-bench-speech` folder run:
+    From `meg_speech_decoding` folder run:
 
     ```bash
     conda env create -f environment_freeze.yml
@@ -82,7 +82,7 @@ python regression_speech.py +experiment=test
 
 4. Install the submodules
 
-    From `ossadtchi-ml-test-bench-speech` folder run:
+    From `meg_speech_decoding` folder run:
 
     ```bash
     pip install --no-deps -e neural_data_preprocessing
@@ -91,7 +91,7 @@ python regression_speech.py +experiment=test
 
 ## Launch
 
-Again, make sure `ossadtchi-ml-test-bench-speech` is the current working directory.
+Again, make sure `meg_speech_decoding` is the current working directory.
 
 Launch training for regression with:
 
